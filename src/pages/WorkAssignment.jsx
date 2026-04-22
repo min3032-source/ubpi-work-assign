@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react'
 import { INITIAL_TASKS, PROJECTS } from '../lib/constants'
-import { getTasks, saveTasks, getAssignments, saveAssignments, getEmployees } from '../lib/storage'
+import {
+  getTasks, saveTasks, getAssignments, saveAssignments,
+  getSecondaryAssignments, saveSecondaryAssignments, getEmployees,
+} from '../lib/storage'
 
 const DIFF_LABELS = ['', '쉬움', '보통', '어려움', '매우 어려움', '최고']
 
 export default function WorkAssignment() {
   const [tasks, setTasks] = useState([])
   const [assignments, setAssignments] = useState({})
+  const [secondaryAssignments, setSecondaryAssignments] = useState({})
   const [employees, setEmployees] = useState([])
   const [dragging, setDragging] = useState(null)
+  const [pendingDrop, setPendingDrop] = useState(null)
   const [newTaskName, setNewTaskName] = useState('')
   const [newTaskProject, setNewTaskProject] = useState(PROJECTS[0])
   const [showAddTask, setShowAddTask] = useState(false)
@@ -17,9 +22,12 @@ export default function WorkAssignment() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [t, a, emp] = await Promise.all([getTasks(), getAssignments(), getEmployees()])
+      const [t, a, sa, emp] = await Promise.all([
+        getTasks(), getAssignments(), getSecondaryAssignments(), getEmployees(),
+      ])
       setTasks(t || INITIAL_TASKS)
       setAssignments(a || {})
+      setSecondaryAssignments(sa || {})
       setEmployees(emp || [])
       setLoading(false)
     }
@@ -27,46 +35,79 @@ export default function WorkAssignment() {
   }, [])
 
   const updateAssignments = (next) => { setAssignments(next); saveAssignments(next) }
-  const updateTasks = (next) => { setTasks(next); saveTasks(next) }
+  const updateSecondaryAssignments = (next) => { setSecondaryAssignments(next); saveSecondaryAssignments(next) }
 
   const handleDrop = (e, employeeName) => {
     e.preventDefault()
     if (!dragging) return
-    updateAssignments({ ...assignments, [dragging]: employeeName })
+    setPendingDrop({ taskId: dragging, employeeName })
     setDragging(null)
+  }
+
+  const handleConfirmRole = (role) => {
+    if (!pendingDrop) return
+    const { taskId, employeeName } = pendingDrop
+    const nextPrimary = { ...assignments }
+    const nextSec = { ...secondaryAssignments }
+    if (role === '정담당') {
+      if (nextSec[taskId] === employeeName) delete nextSec[taskId]
+      nextPrimary[taskId] = employeeName
+    } else {
+      if (nextPrimary[taskId] === employeeName) delete nextPrimary[taskId]
+      nextSec[taskId] = employeeName
+    }
+    updateAssignments(nextPrimary)
+    updateSecondaryAssignments(nextSec)
+    setPendingDrop(null)
   }
 
   const handleDropPool = (e) => {
     e.preventDefault()
     if (!dragging) return
-    const next = { ...assignments }
-    delete next[dragging]
-    updateAssignments(next)
+    const nextPrimary = { ...assignments }
+    const nextSec = { ...secondaryAssignments }
+    delete nextPrimary[dragging]
+    delete nextSec[dragging]
+    updateAssignments(nextPrimary)
+    updateSecondaryAssignments(nextSec)
     setDragging(null)
   }
 
   const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }
 
-  const unassigned = tasks.filter((t) => !assignments[t.id])
-  const getEmpTasks = (name) => tasks.filter((t) => assignments[t.id] === name)
+  const unassigned = tasks.filter((t) => !assignments[t.id] && !secondaryAssignments[t.id])
+
+  const getEmpTasks = (name) =>
+    tasks
+      .filter((t) => assignments[t.id] === name || secondaryAssignments[t.id] === name)
+      .map((t) => ({ ...t, role: assignments[t.id] === name ? '정담당' : '부담당' }))
 
   const addTask = () => {
     if (!newTaskName.trim()) return
     const newTask = { id: `t${Date.now()}`, name: newTaskName.trim(), difficulty: 2, project: newTaskProject }
-    updateTasks([...tasks, newTask])
+    const next = [...tasks, newTask]
+    setTasks(next)
+    saveTasks(next)
     setNewTaskName('')
     setShowAddTask(false)
   }
 
   const removeTask = (taskId) => {
-    const next = { ...assignments }
-    delete next[taskId]
-    updateAssignments(next)
-    updateTasks(tasks.filter((t) => t.id !== taskId))
+    const nextPrimary = { ...assignments }
+    const nextSec = { ...secondaryAssignments }
+    delete nextPrimary[taskId]
+    delete nextSec[taskId]
+    updateAssignments(nextPrimary)
+    updateSecondaryAssignments(nextSec)
+    const next = tasks.filter((t) => t.id !== taskId)
+    setTasks(next)
+    saveTasks(next)
   }
 
   const updateDifficulty = (taskId, val) => {
-    updateTasks(tasks.map((t) => (t.id === taskId ? { ...t, difficulty: Number(val) } : t)))
+    const next = tasks.map((t) => (t.id === taskId ? { ...t, difficulty: Number(val) } : t))
+    setTasks(next)
+    saveTasks(next)
   }
 
   const maxDiff = Math.max(
@@ -74,13 +115,15 @@ export default function WorkAssignment() {
     1
   )
 
+  const pendingTask = pendingDrop ? tasks.find((t) => t.id === pendingDrop.taskId) : null
+
   if (loading) return <div className="page"><div className="empty-state">불러오는 중...</div></div>
 
   return (
     <div className="page">
       <div className="page-header">
         <h1>업무분장 관리</h1>
-        <p>업무를 드래그하여 직원에게 배정하세요</p>
+        <p>업무를 드래그하여 직원에게 배정하세요 — 정담당/부담당을 선택할 수 있습니다</p>
       </div>
 
       <div className="assign-layout">
@@ -111,9 +154,14 @@ export default function WorkAssignment() {
             {unassigned.length === 0 ? (
               <div className="pool-empty">모든 업무가 배정되었습니다</div>
             ) : (
-              unassigned.map((task) => (
-                <TaskCard key={task.id} task={task} isDragging={dragging === task.id}
-                  onDragStart={() => setDragging(task.id)} onRemove={removeTask} onDiffChange={updateDifficulty} />
+              PROJECTS.filter((p) => unassigned.some((t) => t.project === p)).map((project) => (
+                <div key={project} className="project-task-group">
+                  <div className="project-task-group-header">{project}</div>
+                  {unassigned.filter((t) => t.project === project).map((task) => (
+                    <TaskCard key={task.id} task={task} isDragging={dragging === task.id}
+                      onDragStart={() => setDragging(task.id)} onRemove={removeTask} onDiffChange={updateDifficulty} />
+                  ))}
+                </div>
               ))
             )}
           </div>
@@ -159,16 +207,44 @@ export default function WorkAssignment() {
           <span><span className="dot bar-empty" /> 미배정</span>
         </div>
       </div>
+
+      {pendingDrop && (
+        <div className="role-modal-overlay" onClick={() => setPendingDrop(null)}>
+          <div className="role-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>담당 역할 선택</h3>
+            <p>
+              <strong>{pendingTask?.name}</strong>을(를)<br />
+              <strong>{pendingDrop.employeeName}</strong>님에게 배정합니다
+            </p>
+            <div className="role-modal-btns">
+              <button className="role-btn primary-role" onClick={() => handleConfirmRole('정담당')}>
+                정담당
+                <span>주 담당자</span>
+              </button>
+              <button className="role-btn secondary-role" onClick={() => handleConfirmRole('부담당')}>
+                부담당
+                <span>보조 담당자</span>
+              </button>
+            </div>
+            <button className="btn-secondary" style={{ width: '100%' }} onClick={() => setPendingDrop(null)}>취소</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function TaskCard({ task, isDragging, onDragStart, onRemove, onDiffChange }) {
+function TaskCard({ task, role, isDragging, onDragStart, onRemove, onDiffChange }) {
   return (
     <div className={`task-card ${isDragging ? 'is-dragging' : ''}`} draggable
       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart(task.id) }}>
       <div className="tc-header">
         <span className="tc-name">{task.name}</span>
+        {role && (
+          <span className={`role-badge ${role === '정담당' ? 'primary-role' : 'secondary-role'}`}>
+            {role}
+          </span>
+        )}
         <button className="tc-remove" onClick={(e) => { e.stopPropagation(); onRemove(task.id) }}>×</button>
       </div>
       <div className="tc-diff">
@@ -201,7 +277,7 @@ function EmployeeColumn({ employee, tasks, draggingId, onDragStart, onDrop, onDr
       <div className="emp-col-body">
         {tasks.length === 0 ? <div className="col-empty">여기에 드롭</div>
           : tasks.map((task) => (
-            <TaskCard key={task.id} task={task} isDragging={draggingId === task.id}
+            <TaskCard key={task.id} task={task} role={task.role} isDragging={draggingId === task.id}
               onDragStart={onDragStart} onRemove={onRemove} onDiffChange={onDiffChange} />
           ))}
       </div>

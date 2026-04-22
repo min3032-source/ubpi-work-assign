@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { GRADE_OPTIONS, TYPE_OPTIONS, PROJECTS } from '../lib/constants'
 import {
   getTasks, addTask, updateTask, deleteTask,
-  getAssignments, getEvaluations,
+  getAssignments, getSecondaryAssignments, getEvaluations,
   getEmployees, addEmployee, updateEmployee, deleteEmployee,
 } from '../lib/storage'
 
@@ -11,17 +11,16 @@ const DIFF_LABELS = ['', '쉬움', '보통', '어려움', '매우 어려움', '�
 export default function ManagerDashboard() {
   const [tasks, setTasks] = useState([])
   const [assignments, setAssignments] = useState({})
+  const [secondaryAssignments, setSecondaryAssignments] = useState({})
   const [evaluations, setEvaluations] = useState({})
   const [employees, setEmployees] = useState([])
   const [activeTab, setActiveTab] = useState('overview')
   const [loading, setLoading] = useState(true)
 
-  // Employee form state
   const [showAddEmp, setShowAddEmp] = useState(false)
   const [empForm, setEmpForm] = useState({ name: '', grade: '선임', type: '정규직' })
   const [editingEmp, setEditingEmp] = useState(null)
 
-  // Task management state
   const [selectedProject, setSelectedProject] = useState(PROJECTS[0])
   const [showAddTaskForm, setShowAddTaskForm] = useState(false)
   const [newTaskName, setNewTaskName] = useState('')
@@ -30,11 +29,12 @@ export default function ManagerDashboard() {
 
   useEffect(() => {
     async function load() {
-      const [t, a, e, emp] = await Promise.all([
-        getTasks(), getAssignments(), getEvaluations(), getEmployees(),
+      const [t, a, sa, e, emp] = await Promise.all([
+        getTasks(), getAssignments(), getSecondaryAssignments(), getEvaluations(), getEmployees(),
       ])
       setTasks(t || [])
       setAssignments(a || {})
+      setSecondaryAssignments(sa || {})
       setEvaluations(e || {})
       setEmployees(emp || [])
       setLoading(false)
@@ -42,9 +42,16 @@ export default function ManagerDashboard() {
     load()
   }, [])
 
-  const getEmpTasks = (name) => tasks.filter((t) => assignments[t.id] === name)
-  const submittedCount = employees.filter((e) => evaluations[e.name]).length
+  const getEmpTasks = (name) =>
+    tasks
+      .filter((t) => assignments[t.id] === name || secondaryAssignments[t.id] === name)
+      .map((t) => ({ ...t, role: assignments[t.id] === name ? '정담당' : '부담당' }))
 
+  const submittedCount = employees.filter((e) => evaluations[e.name]).length
+  const submittedEmployees = employees.filter((e) => evaluations[e.name])
+  const pendingEmployees = employees.filter((e) => !evaluations[e.name])
+
+  // 모든 난이도 차이 (gap != 0)
   const disagreements = []
   employees.forEach((emp) => {
     const ev = evaluations[emp.name]
@@ -53,7 +60,7 @@ export default function ManagerDashboard() {
       const empRating = ev.difficultyRatings?.[task.id]
       if (empRating === undefined) return
       const gap = empRating - task.difficulty
-      if (Math.abs(gap) >= 2) {
+      if (gap !== 0) {
         disagreements.push({ employee: emp.name, task: task.name, managerDiff: task.difficulty, empDiff: empRating, gap })
       }
     })
@@ -119,6 +126,8 @@ export default function ManagerDashboard() {
 
   if (loading) return <div className="page"><div className="empty-state">불러오는 중...</div></div>
 
+  const bigGapCount = disagreements.filter((d) => Math.abs(d.gap) >= 2).length
+
   const TABS = [
     { key: 'overview', label: '전체 현황' },
     { key: 'disagreements', label: `난이도 이견 (${disagreements.length})` },
@@ -140,8 +149,8 @@ export default function ManagerDashboard() {
           <div className="summary-label">평가 제출</div>
         </div>
         <div className="summary-card warning">
-          <div className="summary-num">{disagreements.length}</div>
-          <div className="summary-label">난이도 이견</div>
+          <div className="summary-num">{bigGapCount}</div>
+          <div className="summary-label">큰 이견 (2점↑)</div>
         </div>
         <div className="summary-card info">
           <div className="summary-num">{Object.keys(desiredTaskMap).length}</div>
@@ -163,53 +172,85 @@ export default function ManagerDashboard() {
 
       {/* 전체 현황 */}
       {activeTab === 'overview' && (
-        <div className="table-wrap">
-          <table className="overview-table">
-            <thead>
-              <tr><th>직원명</th><th>직급 / 유형</th><th>배정 업무</th><th>평가 제출</th><th>평균 이견</th></tr>
-            </thead>
-            <tbody>
-              {employees.map((emp) => {
-                const empTasks = getEmpTasks(emp.name)
-                const ev = evaluations[emp.name]
-                const avgGap = ev
-                  ? (() => {
-                      const gaps = empTasks.map((t) => {
-                        const r = ev.difficultyRatings?.[t.id]
-                        return r !== undefined ? Math.abs(r - t.difficulty) : null
-                      }).filter((g) => g !== null)
-                      return gaps.length > 0 ? (gaps.reduce((a, b) => a + b, 0) / gaps.length).toFixed(1) : '0.0'
-                    })()
-                  : null
-                return (
-                  <tr key={emp.id}>
-                    <td><strong>{emp.name}</strong></td>
-                    <td>
-                      <div className="emp-meta-cell">
-                        <span>{emp.grade}</span>
-                        <span className={`badge ${emp.type === '계약직' ? 'contract' : emp.type === '육아휴직대체' ? 'parental' : 'regular'}`}>{emp.type}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="task-pills">
-                        {empTasks.length === 0 ? <span className="no-tasks">미배정</span>
-                          : empTasks.map((t) => <span key={t.id} className="task-pill">{t.name}</span>)}
-                      </div>
-                    </td>
-                    <td>
-                      {ev ? <span className="badge-status success">제출완료</span>
-                        : <span className="badge-status pending">미제출</span>}
-                    </td>
-                    <td>
-                      {avgGap !== null
-                        ? <span className={Number(avgGap) >= 2 ? 'text-warning' : ''}>{avgGap}점</span>
-                        : <span className="text-muted">-</span>}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+        <div>
+          {/* 제출 현황 */}
+          <div className="submission-overview">
+            <div className="submission-group submitted">
+              <div className="submission-group-title">✅ 제출 완료 ({submittedCount}명)</div>
+              <div className="submission-emp-list">
+                {submittedEmployees.length === 0
+                  ? <span className="text-muted">아직 없음</span>
+                  : submittedEmployees.map((e) => (
+                    <span key={e.id} className="emp-status-chip submitted">{e.name}</span>
+                  ))}
+              </div>
+            </div>
+            <div className="submission-group pending">
+              <div className="submission-group-title">⏳ 미제출 ({pendingEmployees.length}명)</div>
+              <div className="submission-emp-list">
+                {pendingEmployees.length === 0
+                  ? <span className="text-muted">모두 제출 완료</span>
+                  : pendingEmployees.map((e) => (
+                    <span key={e.id} className="emp-status-chip pending">{e.name}</span>
+                  ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 상세 테이블 */}
+          <div className="table-wrap">
+            <table className="overview-table">
+              <thead>
+                <tr><th>직원명</th><th>직급 / 유형</th><th>배정 업무</th><th>평가 제출</th><th>평균 이견</th></tr>
+              </thead>
+              <tbody>
+                {employees.map((emp) => {
+                  const empTasks = getEmpTasks(emp.name)
+                  const ev = evaluations[emp.name]
+                  const avgGap = ev
+                    ? (() => {
+                        const gaps = empTasks.map((t) => {
+                          const r = ev.difficultyRatings?.[t.id]
+                          return r !== undefined ? Math.abs(r - t.difficulty) : null
+                        }).filter((g) => g !== null)
+                        return gaps.length > 0 ? (gaps.reduce((a, b) => a + b, 0) / gaps.length).toFixed(1) : '0.0'
+                      })()
+                    : null
+                  return (
+                    <tr key={emp.id}>
+                      <td><strong>{emp.name}</strong></td>
+                      <td>
+                        <div className="emp-meta-cell">
+                          <span>{emp.grade}</span>
+                          <span className={`badge ${emp.type === '계약직' ? 'contract' : emp.type === '육아휴직대체' ? 'parental' : 'regular'}`}>{emp.type}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="task-pills">
+                          {empTasks.length === 0 ? <span className="no-tasks">미배정</span>
+                            : empTasks.map((t) => (
+                              <span key={t.id} className={`task-pill ${t.role === '부담당' ? 'secondary' : ''}`}>
+                                {t.name}
+                                <span className="pill-role">{t.role}</span>
+                              </span>
+                            ))}
+                        </div>
+                      </td>
+                      <td>
+                        {ev ? <span className="badge-status success">제출완료</span>
+                          : <span className="badge-status pending">미제출</span>}
+                      </td>
+                      <td>
+                        {avgGap !== null
+                          ? <span className={Number(avgGap) >= 2 ? 'text-warning' : ''}>{avgGap}점</span>
+                          : <span className="text-muted">-</span>}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -219,22 +260,32 @@ export default function ManagerDashboard() {
           {disagreements.length === 0 ? (
             <div className="empty-state">난이도 이견이 없습니다 🎉</div>
           ) : (
-            <div className="disagreement-list">
-              {disagreements.map((d, i) => (
-                <div key={i} className="disagreement-card">
-                  <div className="disagreement-header">
-                    <strong>{d.employee}</strong>
-                    <span className="disagreement-task">{d.task}</span>
-                  </div>
-                  <div className="diff-compare">
-                    <div className="diff-item"><div className="diff-label">팀장 설정</div><div className="diff-value manager">{d.managerDiff}점</div></div>
-                    <div className="diff-arrow">→</div>
-                    <div className="diff-item"><div className="diff-label">직원 평가</div><div className={`diff-value ${d.gap > 0 ? 'higher' : 'lower'}`}>{d.empDiff}점</div></div>
-                    <div className="diff-gap-label">{d.gap > 0 ? `직원이 ${d.gap}점 더 높게 평가` : `직원이 ${Math.abs(d.gap)}점 더 낮게 평가`}</div>
-                  </div>
+            <>
+              {bigGapCount > 0 && (
+                <div className="alert-info" style={{ marginBottom: 16 }}>
+                  ⚠ 2점 이상 큰 이견이 <strong>{bigGapCount}건</strong> 있습니다. 면담을 통해 확인해주세요.
                 </div>
-              ))}
-            </div>
+              )}
+              <div className="disagreement-list">
+                {disagreements
+                  .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap))
+                  .map((d, i) => (
+                    <div key={i} className={`disagreement-card ${Math.abs(d.gap) >= 2 ? 'high-gap' : ''}`}>
+                      <div className="disagreement-header">
+                        <strong>{d.employee}</strong>
+                        <span className="disagreement-task">{d.task}</span>
+                        {Math.abs(d.gap) >= 2 && <span className="gap-warning-badge">⚠ 큰 이견</span>}
+                      </div>
+                      <div className="diff-compare">
+                        <div className="diff-item"><div className="diff-label">팀장 설정</div><div className="diff-value manager">{d.managerDiff}점</div></div>
+                        <div className="diff-arrow">→</div>
+                        <div className="diff-item"><div className="diff-label">직원 평가</div><div className={`diff-value ${d.gap > 0 ? 'higher' : 'lower'}`}>{d.empDiff}점</div></div>
+                        <div className="diff-gap-label">{d.gap > 0 ? `직원이 ${d.gap}점 더 높게 평가` : `직원이 ${Math.abs(d.gap)}점 더 낮게 평가`}</div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </>
           )}
         </div>
       )}
@@ -249,12 +300,16 @@ export default function ManagerDashboard() {
               {tasks.filter((t) => desiredTaskMap[t.id])
                 .sort((a, b) => (desiredTaskMap[b.id]?.length || 0) - (desiredTaskMap[a.id]?.length || 0))
                 .map((task) => {
-                  const assignee = Object.entries(assignments).find(([tid]) => tid === task.id)?.[1]
+                  const assignee = assignments[task.id] || secondaryAssignments[task.id]
+                  const isConflict = desiredTaskMap[task.id].length > 1
                   return (
-                    <div key={task.id} className="desired-card">
+                    <div key={task.id} className={`desired-card ${isConflict ? 'conflict' : ''}`}>
                       <div className="desired-top">
                         <span className="desired-task-name">{task.name}</span>
-                        <span className="desired-count">{desiredTaskMap[task.id].length}명 희망</span>
+                        <span className={`desired-count ${isConflict ? 'conflict' : ''}`}>
+                          {desiredTaskMap[task.id].length}명 희망
+                          {isConflict && ' ⚠'}
+                        </span>
                       </div>
                       <div className="desired-employees">
                         {desiredTaskMap[task.id].map((name) => <span key={name} className="emp-chip">{name}</span>)}
@@ -281,14 +336,9 @@ export default function ManagerDashboard() {
           {showAddEmp && (
             <div className="card mgmt-form">
               <div className="form-row">
-                <input
-                  className="form-input"
-                  placeholder="이름"
-                  value={empForm.name}
+                <input className="form-input" placeholder="이름" value={empForm.name}
                   onChange={(e) => setEmpForm((p) => ({ ...p, name: e.target.value }))}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddEmp()}
-                  autoFocus
-                />
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddEmp()} autoFocus />
                 <select className="form-select" value={empForm.grade} onChange={(e) => setEmpForm((p) => ({ ...p, grade: e.target.value }))}>
                   {GRADE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
                 </select>
@@ -355,7 +405,8 @@ export default function ManagerDashboard() {
         <div>
           <div className="project-filter">
             {PROJECTS.map((p) => (
-              <button key={p} className={`project-btn ${selectedProject === p ? 'active' : ''}`} onClick={() => { setSelectedProject(p); setShowAddTaskForm(false); setEditingTask(null) }}>
+              <button key={p} className={`project-btn ${selectedProject === p ? 'active' : ''}`}
+                onClick={() => { setSelectedProject(p); setShowAddTaskForm(false); setEditingTask(null) }}>
                 {p}
                 <span className="project-count">{tasks.filter((t) => t.project === p).length}</span>
               </button>
@@ -407,14 +458,9 @@ export default function ManagerDashboard() {
           {showAddTaskForm ? (
             <div className="card mgmt-form" style={{ marginTop: 12 }}>
               <div className="form-row">
-                <input
-                  className="form-input"
-                  placeholder="업무명 입력"
-                  value={newTaskName}
+                <input className="form-input" placeholder="업무명 입력" value={newTaskName}
                   onChange={(e) => setNewTaskName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
-                  autoFocus
-                />
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddTask()} autoFocus />
                 <div className="inline-diff">
                   <input type="range" min="1" max="5" value={newTaskDiff} onChange={(e) => setNewTaskDiff(Number(e.target.value))} className="tc-slider" />
                   <span>{DIFF_LABELS[newTaskDiff]} ({newTaskDiff})</span>

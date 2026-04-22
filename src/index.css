@@ -1364,3 +1364,250 @@ body {
   border-radius: 6px;
   color: var(--text-muted);
 }
+
+/* ── Role Badges ── */
+.role-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.role-badge.primary-role {
+  background: var(--primary-light);
+  color: var(--primary);
+  border: 1px solid #bfdbfe;
+}
+
+.role-badge.secondary-role {
+  background: var(--success-light);
+  color: var(--success);
+  border: 1px solid #a7f3d0;
+}
+
+/* ── Role Selection Modal ── */
+.role-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.role-modal {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 28px;
+  max-width: 360px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+
+.role-modal h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+
+.role-modal p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 22px;
+  line-height: 1.7;
+}
+
+.role-modal-btns {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.role-btn {
+  flex: 1;
+  padding: 16px 12px;
+  border-radius: 8px;
+  border: 2px solid;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.role-btn span {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  margin-top: 5px;
+  opacity: 0.75;
+}
+
+.role-btn.primary-role {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-light);
+}
+
+.role-btn.primary-role:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.role-btn.secondary-role {
+  border-color: var(--success);
+  color: var(--success);
+  background: var(--success-light);
+}
+
+.role-btn.secondary-role:hover {
+  background: var(--success);
+  color: white;
+}
+
+/* ── Project Task Groups (Pool) ── */
+.project-task-group {
+  margin-bottom: 14px;
+}
+
+.project-task-group:last-child {
+  margin-bottom: 0;
+}
+
+.project-task-group-header {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Task Pill with Role ── */
+.task-pill.secondary {
+  background: var(--success-light);
+  color: var(--success);
+  border-color: #a7f3d0;
+}
+
+.pill-role {
+  font-size: 9px;
+  margin-left: 3px;
+  opacity: 0.7;
+}
+
+/* ── Submission Overview ── */
+.submission-overview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.submission-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  box-shadow: var(--shadow);
+}
+
+.submission-group.submitted {
+  border-left: 4px solid var(--success);
+}
+
+.submission-group.pending {
+  border-left: 4px solid var(--warning);
+}
+
+.submission-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.submission-emp-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.emp-status-chip {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 11px;
+  border-radius: 999px;
+}
+
+.emp-status-chip.submitted {
+  background: var(--success-light);
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.emp-status-chip.pending {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+/* ── Disagreement: high gap ── */
+.disagreement-card.high-gap {
+  border-left-color: var(--danger);
+}
+
+.gap-warning-badge {
+  font-size: 11px;
+  background: #fef2f2;
+  color: var(--danger);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+  margin-left: auto;
+}
+
+/* ── Desired Tasks: project grouping ── */
+.desired-project-group {
+  margin-bottom: 22px;
+}
+
+.desired-project-group:last-child {
+  margin-bottom: 0;
+}
+
+.desired-project-header {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-light);
+  padding: 6px 14px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  border: 1px solid #bfdbfe;
+}
+
+/* ── Desired card: conflict highlight ── */
+.desired-card.conflict {
+  border-left: 3px solid var(--warning);
+}
+
+.desired-count.conflict {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* ── Rating task title row ── */
+.rating-task-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

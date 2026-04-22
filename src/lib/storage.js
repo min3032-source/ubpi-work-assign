@@ -146,6 +146,34 @@ export const getEvaluations = async () => {
   }
 }
 
+// ── Secondary Assignments (부담당) ──
+export const getSecondaryAssignments = async () => {
+  if (sb()) {
+    const { data, error } = await supabase.from('secondary_assignments').select('*')
+    if (!error && data) {
+      return Object.fromEntries(data.map((a) => [a.task_id, a.employee_name]))
+    }
+  }
+  try {
+    const stored = localStorage.getItem('wam_secondary_assignments')
+    return stored ? JSON.parse(stored) : {}
+  } catch {
+    return {}
+  }
+}
+
+export const saveSecondaryAssignments = async (assignments) => {
+  if (sb()) {
+    await supabase.from('secondary_assignments').delete().neq('task_id', '')
+    const rows = Object.entries(assignments).map(([task_id, employee_name]) => ({ task_id, employee_name }))
+    if (rows.length > 0) {
+      await supabase.from('secondary_assignments').insert(rows)
+    }
+    return
+  }
+  localStorage.setItem('wam_secondary_assignments', JSON.stringify(assignments))
+}
+
 export const saveEvaluation = async (employeeName, evaluation) => {
   if (sb()) {
     await Promise.all([
