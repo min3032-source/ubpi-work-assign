@@ -1,7 +1,36 @@
 import { supabase } from '../supabaseClient'
-import { INITIAL_TASKS } from './constants'
+import { EMPLOYEES, INITIAL_TASKS } from './constants'
 
 const sb = () => supabase !== null
+
+// ── Employees ──
+export const getEmployees = async () => {
+  if (sb()) {
+    const { data, error } = await supabase.from('employees').select('*').order('created_at')
+    if (!error && data) return data
+  }
+  return EMPLOYEES.map((e, i) => ({ ...e, id: `local_${i}` }))
+}
+
+export const addEmployee = async (employee) => {
+  if (sb()) {
+    const { data, error } = await supabase.from('employees').insert([employee]).select()
+    if (!error && data) return data[0]
+  }
+  return { ...employee, id: `local_${Date.now()}` }
+}
+
+export const updateEmployee = async (id, updates) => {
+  if (sb()) {
+    await supabase.from('employees').update(updates).eq('id', id)
+  }
+}
+
+export const deleteEmployee = async (id) => {
+  if (sb()) {
+    await supabase.from('employees').delete().eq('id', id)
+  }
+}
 
 // ── Tasks ──
 export const getTasks = async () => {
@@ -23,18 +52,40 @@ export const saveTasks = async (tasks) => {
     const existingIds = (existing || []).map((t) => t.id)
     const newIds = tasks.map((t) => t.id)
     const toDelete = existingIds.filter((id) => !newIds.includes(id))
-
     if (toDelete.length > 0) {
       await supabase.from('tasks').delete().in('id', toDelete)
     }
     if (tasks.length > 0) {
-      await supabase
-        .from('tasks')
-        .upsert(tasks.map(({ id, name, difficulty }) => ({ id, name, difficulty })))
+      await supabase.from('tasks').upsert(
+        tasks.map(({ id, name, difficulty, project }) => ({ id, name, difficulty, project: project || '기타' }))
+      )
     }
     return
   }
   localStorage.setItem('wam_tasks', JSON.stringify(tasks))
+}
+
+export const addTask = async (task) => {
+  if (sb()) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert([{ id: task.id, name: task.name, difficulty: task.difficulty, project: task.project || '기타' }])
+      .select()
+    if (!error && data) return data[0]
+  }
+  return task
+}
+
+export const updateTask = async (id, updates) => {
+  if (sb()) {
+    await supabase.from('tasks').update(updates).eq('id', id)
+  }
+}
+
+export const deleteTask = async (id) => {
+  if (sb()) {
+    await supabase.from('tasks').delete().eq('id', id)
+  }
 }
 
 // ── Assignments ──
@@ -56,10 +107,7 @@ export const getAssignments = async () => {
 export const saveAssignments = async (assignments) => {
   if (sb()) {
     await supabase.from('assignments').delete().neq('task_id', '')
-    const rows = Object.entries(assignments).map(([task_id, employee_name]) => ({
-      task_id,
-      employee_name,
-    }))
+    const rows = Object.entries(assignments).map(([task_id, employee_name]) => ({ task_id, employee_name }))
     if (rows.length > 0) {
       await supabase.from('assignments').insert(rows)
     }
@@ -75,23 +123,19 @@ export const getEvaluations = async () => {
       supabase.from('evaluations').select('*'),
       supabase.from('desired_tasks').select('*'),
     ])
-
     const result = {}
-
     ;(evals || []).forEach((e) => {
       if (!result[e.employee_name]) {
         result[e.employee_name] = { difficultyRatings: {}, desiredTasks: [], submittedAt: e.submitted_at }
       }
       result[e.employee_name].difficultyRatings[e.task_id] = e.difficulty_rating
     })
-
     ;(desired || []).forEach((d) => {
       if (!result[d.employee_name]) {
         result[d.employee_name] = { difficultyRatings: {}, desiredTasks: [] }
       }
       result[d.employee_name].desiredTasks.push(d.task_id)
     })
-
     return result
   }
   try {
@@ -108,36 +152,16 @@ export const saveEvaluation = async (employeeName, evaluation) => {
       supabase.from('evaluations').delete().eq('employee_name', employeeName),
       supabase.from('desired_tasks').delete().eq('employee_name', employeeName),
     ])
-
     const evalRows = Object.entries(evaluation.difficultyRatings || {}).map(
-      ([task_id, difficulty_rating]) => ({
-        employee_name: employeeName,
-        task_id,
-        difficulty_rating,
-        submitted_at: evaluation.submittedAt,
-      })
+      ([task_id, difficulty_rating]) => ({ employee_name: employeeName, task_id, difficulty_rating, submitted_at: evaluation.submittedAt })
     )
-    if (evalRows.length > 0) {
-      await supabase.from('evaluations').insert(evalRows)
-    }
-
-    const desiredRows = (evaluation.desiredTasks || []).map((task_id) => ({
-      employee_name: employeeName,
-      task_id,
-    }))
-    if (desiredRows.length > 0) {
-      await supabase.from('desired_tasks').insert(desiredRows)
-    }
+    if (evalRows.length > 0) await supabase.from('evaluations').insert(evalRows)
+    const desiredRows = (evaluation.desiredTasks || []).map((task_id) => ({ employee_name: employeeName, task_id }))
+    if (desiredRows.length > 0) await supabase.from('desired_tasks').insert(desiredRows)
     return
   }
-
   const all = (() => {
-    try {
-      const stored = localStorage.getItem('wam_evaluations')
-      return stored ? JSON.parse(stored) : {}
-    } catch {
-      return {}
-    }
+    try { return JSON.parse(localStorage.getItem('wam_evaluations') || '{}') } catch { return {} }
   })()
   all[employeeName] = evaluation
   localStorage.setItem('wam_evaluations', JSON.stringify(all))

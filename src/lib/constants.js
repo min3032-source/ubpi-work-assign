@@ -8,15 +8,39 @@ export const EMPLOYEES = [
   { name: '김규선', grade: '선임', type: '계약직' },
 ]
 
-export const INITIAL_TASKS = [
-  { id: 't1', name: '사업계획 수립', difficulty: 4 },
-  { id: 't2', name: '예산 관리', difficulty: 3 },
-  { id: 't3', name: '보고서 작성', difficulty: 2 },
-  { id: 't4', name: '데이터 분석', difficulty: 3 },
-  { id: 't5', name: '고객 응대', difficulty: 2 },
-  { id: 't6', name: '교육 운영', difficulty: 3 },
-  { id: 't7', name: '시스템 관리', difficulty: 3 },
-  { id: 't8', name: '문서 관리', difficulty: 1 },
-  { id: 't9', name: '회의 진행', difficulty: 2 },
-  { id: 't10', name: '성과 관리', difficulty: 4 },
-]
+export const GRADE_OPTIONS = ['책임', '선임', '주임']
+export const TYPE_OPTIONS = ['정규직', '계약직', '육아휴직대체']
+export const PROJECTS = ['U-시리즈', '청년아카데미', '로컬창업', '소상공인', '마을기업']
+
+export const PROJECT_TASKS = {
+  'U-시리즈': [
+    '교육 프로그램 운영', '기술·제품 실증 및 개발지원', '맞춤형 창업공간 지원',
+    '맞춤형 멘토링 운영', '기술보호·경영 전문서비스', '마케팅 지원',
+    'AI 솔루션 융합 창업육성', '사업예산 관리·성과보고',
+  ],
+  '청년아카데미': [
+    '발굴육성 14개사 관리', '성장지원 8개사 관리', '창업활동비 검토 및 지급',
+    '현장점검·중간평가', '창업교육·멘토링 운영', '창업페스티벌·플리마켓', '사업 회계 집행 관리',
+  ],
+  '로컬창업': [
+    '사업 총괄·기관협력', '체험점포 운영·관리', '기업관리·멘토링',
+    '교육 프로그램 운영', '예산 집행·성과 정리', '홍보·모집·평가 지원',
+  ],
+  '소상공인': [
+    '사업홍보·신청서류 검토', '현장점검·지원금 지급',
+    '부정수급 모니터링·환수', '사업결과·성과 관리',
+  ],
+  '마을기업': [
+    '아카데미 운영·공동체 사업화 상담', '마을기업 관리·판로지원',
+    '사업 예산 집행 및 정산', '관계기관 협력업무', '문서관리·팀 자산관리',
+  ],
+}
+
+export const INITIAL_TASKS = Object.entries(PROJECT_TASKS).flatMap(([project, names]) =>
+  names.map((name, i) => ({
+    id: `${project}_${i}`,
+    name,
+    difficulty: 2,
+    project,
+  }))
+)

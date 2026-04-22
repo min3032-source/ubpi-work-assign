@@ -1,37 +1,33 @@
 import { useState, useEffect } from 'react'
-import { EMPLOYEES, INITIAL_TASKS } from '../lib/constants'
-import { getTasks, saveTasks, getAssignments, saveAssignments } from '../lib/storage'
+import { INITIAL_TASKS, PROJECTS } from '../lib/constants'
+import { getTasks, saveTasks, getAssignments, saveAssignments, getEmployees } from '../lib/storage'
 
 const DIFF_LABELS = ['', '쉬움', '보통', '어려움', '매우 어려움', '최고']
 
 export default function WorkAssignment() {
   const [tasks, setTasks] = useState([])
   const [assignments, setAssignments] = useState({})
+  const [employees, setEmployees] = useState([])
   const [dragging, setDragging] = useState(null)
   const [newTaskName, setNewTaskName] = useState('')
+  const [newTaskProject, setNewTaskProject] = useState(PROJECTS[0])
   const [showAddTask, setShowAddTask] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [t, a] = await Promise.all([getTasks(), getAssignments()])
+      const [t, a, emp] = await Promise.all([getTasks(), getAssignments(), getEmployees()])
       setTasks(t || INITIAL_TASKS)
       setAssignments(a || {})
+      setEmployees(emp || [])
       setLoading(false)
     }
     load()
   }, [])
 
-  const updateAssignments = (next) => {
-    setAssignments(next)
-    saveAssignments(next)
-  }
-
-  const updateTasks = (next) => {
-    setTasks(next)
-    saveTasks(next)
-  }
+  const updateAssignments = (next) => { setAssignments(next); saveAssignments(next) }
+  const updateTasks = (next) => { setTasks(next); saveTasks(next) }
 
   const handleDrop = (e, employeeName) => {
     e.preventDefault()
@@ -49,17 +45,14 @@ export default function WorkAssignment() {
     setDragging(null)
   }
 
-  const handleDragOver = (e) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-  }
+  const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }
 
   const unassigned = tasks.filter((t) => !assignments[t.id])
   const getEmpTasks = (name) => tasks.filter((t) => assignments[t.id] === name)
 
   const addTask = () => {
     if (!newTaskName.trim()) return
-    const newTask = { id: `t${Date.now()}`, name: newTaskName.trim(), difficulty: 2 }
+    const newTask = { id: `t${Date.now()}`, name: newTaskName.trim(), difficulty: 2, project: newTaskProject }
     updateTasks([...tasks, newTask])
     setNewTaskName('')
     setShowAddTask(false)
@@ -77,9 +70,7 @@ export default function WorkAssignment() {
   }
 
   const maxDiff = Math.max(
-    ...EMPLOYEES.map((e) =>
-      getEmpTasks(e.name).reduce((s, t) => s + (t.difficulty || 2), 0)
-    ),
+    ...employees.map((e) => getEmpTasks(e.name).reduce((s, t) => s + (t.difficulty || 2), 0)),
     1
   )
 
@@ -96,9 +87,7 @@ export default function WorkAssignment() {
         <div className="pool-section">
           <div className="pool-header">
             <h2>미배정 업무 ({unassigned.length})</h2>
-            <button className="btn-sm" onClick={() => setShowAddTask((v) => !v)}>
-              + 업무 추가
-            </button>
+            <button className="btn-sm" onClick={() => setShowAddTask((v) => !v)}>+ 업무 추가</button>
           </div>
 
           {showAddTask && (
@@ -110,6 +99,9 @@ export default function WorkAssignment() {
                 onKeyDown={(e) => e.key === 'Enter' && addTask()}
                 autoFocus
               />
+              <select value={newTaskProject} onChange={(e) => setNewTaskProject(e.target.value)} className="form-select-sm">
+                {PROJECTS.map((p) => <option key={p}>{p}</option>)}
+              </select>
               <button className="btn-sm primary" onClick={addTask}>추가</button>
               <button className="btn-sm" onClick={() => setShowAddTask(false)}>취소</button>
             </div>
@@ -120,32 +112,18 @@ export default function WorkAssignment() {
               <div className="pool-empty">모든 업무가 배정되었습니다</div>
             ) : (
               unassigned.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  isDragging={dragging === task.id}
-                  onDragStart={() => setDragging(task.id)}
-                  onRemove={removeTask}
-                  onDiffChange={updateDifficulty}
-                />
+                <TaskCard key={task.id} task={task} isDragging={dragging === task.id}
+                  onDragStart={() => setDragging(task.id)} onRemove={removeTask} onDiffChange={updateDifficulty} />
               ))
             )}
           </div>
         </div>
 
         <div className="employees-area">
-          {EMPLOYEES.map((emp) => (
-            <EmployeeColumn
-              key={emp.name}
-              employee={emp}
-              tasks={getEmpTasks(emp.name)}
-              draggingId={dragging}
-              onDragStart={setDragging}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onRemove={removeTask}
-              onDiffChange={updateDifficulty}
-            />
+          {employees.map((emp) => (
+            <EmployeeColumn key={emp.id} employee={emp} tasks={getEmpTasks(emp.name)}
+              draggingId={dragging} onDragStart={setDragging} onDrop={handleDrop}
+              onDragOver={handleDragOver} onRemove={removeTask} onDiffChange={updateDifficulty} />
           ))}
         </div>
       </div>
@@ -153,14 +131,13 @@ export default function WorkAssignment() {
       <div className="balance-section">
         <h2>업무량 균형 분석</h2>
         <div className="balance-chart">
-          {EMPLOYEES.map((emp) => {
+          {employees.map((emp) => {
             const empTasks = getEmpTasks(emp.name)
             const totalDiff = empTasks.reduce((s, t) => s + (t.difficulty || 2), 0)
             const pct = maxDiff > 0 ? (totalDiff / maxDiff) * 100 : 0
             const level = pct > 75 ? 'high' : pct > 0 ? 'normal' : 'empty'
-
             return (
-              <div key={emp.name} className="balance-row">
+              <div key={emp.id} className="balance-row">
                 <div className="balance-name">
                   <span className="b-name">{emp.name}</span>
                   <span className="b-type">{emp.type}</span>
@@ -188,29 +165,17 @@ export default function WorkAssignment() {
 
 function TaskCard({ task, isDragging, onDragStart, onRemove, onDiffChange }) {
   return (
-    <div
-      className={`task-card ${isDragging ? 'is-dragging' : ''}`}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = 'move'
-        onDragStart(task.id)
-      }}
-    >
+    <div className={`task-card ${isDragging ? 'is-dragging' : ''}`} draggable
+      onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart(task.id) }}>
       <div className="tc-header">
         <span className="tc-name">{task.name}</span>
         <button className="tc-remove" onClick={(e) => { e.stopPropagation(); onRemove(task.id) }}>×</button>
       </div>
       <div className="tc-diff">
-        <span className="tc-diff-label">
-          난이도 {DIFF_LABELS[task.difficulty]} ({task.difficulty})
-        </span>
-        <input
-          type="range" min="1" max="5"
-          value={task.difficulty}
+        <span className="tc-diff-label">난이도 {DIFF_LABELS[task.difficulty]} ({task.difficulty})</span>
+        <input type="range" min="1" max="5" value={task.difficulty}
           onChange={(e) => onDiffChange(task.id, e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-          className="tc-slider"
-        />
+          onClick={(e) => e.stopPropagation()} className="tc-slider" />
       </div>
     </div>
   )
@@ -218,14 +183,11 @@ function TaskCard({ task, isDragging, onDragStart, onRemove, onDiffChange }) {
 
 function EmployeeColumn({ employee, tasks, draggingId, onDragStart, onDrop, onDragOver, onRemove, onDiffChange }) {
   const [isOver, setIsOver] = useState(false)
-
   return (
-    <div
-      className={`emp-col ${isOver ? 'drop-over' : ''}`}
+    <div className={`emp-col ${isOver ? 'drop-over' : ''}`}
       onDrop={(e) => { setIsOver(false); onDrop(e, employee.name) }}
       onDragOver={(e) => { onDragOver(e); setIsOver(true) }}
-      onDragLeave={() => setIsOver(false)}
-    >
+      onDragLeave={() => setIsOver(false)}>
       <div className="emp-col-head">
         <div className="emp-col-name">{employee.name}</div>
         <div className="emp-col-meta">
@@ -237,20 +199,11 @@ function EmployeeColumn({ employee, tasks, draggingId, onDragStart, onDrop, onDr
         <div className="emp-col-count">{tasks.length}개 배정</div>
       </div>
       <div className="emp-col-body">
-        {tasks.length === 0 ? (
-          <div className="col-empty">여기에 드롭</div>
-        ) : (
-          tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              isDragging={draggingId === task.id}
-              onDragStart={onDragStart}
-              onRemove={onRemove}
-              onDiffChange={onDiffChange}
-            />
-          ))
-        )}
+        {tasks.length === 0 ? <div className="col-empty">여기에 드롭</div>
+          : tasks.map((task) => (
+            <TaskCard key={task.id} task={task} isDragging={draggingId === task.id}
+              onDragStart={onDragStart} onRemove={onRemove} onDiffChange={onDiffChange} />
+          ))}
       </div>
     </div>
   )

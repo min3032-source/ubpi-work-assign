@@ -1193,3 +1193,174 @@ body {
   height: 10px;
   border-radius: 50%;
 }
+
+/* ── Employee & Task Management ── */
+.mgmt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.mgmt-count {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.mgmt-form {
+  margin-bottom: 14px;
+  padding: 16px 20px;
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.form-input {
+  flex: 1;
+  min-width: 100px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  outline: none;
+}
+
+.form-input:focus {
+  border-color: var(--primary);
+}
+
+.form-select {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  outline: none;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.form-select:focus {
+  border-color: var(--primary);
+}
+
+.form-select-sm {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  outline: none;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.inline-input {
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+}
+
+.inline-input.wide {
+  min-width: 200px;
+}
+
+.inline-select {
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 13px;
+  outline: none;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.action-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-sm.danger {
+  color: var(--danger);
+  border-color: #fecaca;
+}
+
+.btn-sm.danger:hover {
+  background: #fef2f2;
+  border-color: var(--danger);
+}
+
+/* ── Project Filter ── */
+.project-filter {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.project-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.project-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.project-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+.project-count {
+  background: rgba(255,255,255,0.25);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.project-btn:not(.active) .project-count {
+  background: var(--border);
+  color: var(--text-muted);
+}
+
+.inline-diff {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.inline-diff input[type="range"] {
+  width: 100px;
+  accent-color: var(--primary);
+}
+
+.diff-chip {
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: var(--text-muted);
+}

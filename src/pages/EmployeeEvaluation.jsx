@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
-import { EMPLOYEES } from '../lib/constants'
-import { getTasks, getAssignments, getEvaluations, saveEvaluation } from '../lib/storage'
+import { getTasks, getAssignments, getEvaluations, saveEvaluation, getEmployees } from '../lib/storage'
 
 const STEPS = ['직원 선택', '난이도 평가', '희망업무', '제출 완료']
 const DIFF_LABELS = ['', '매우 쉬움', '쉬움', '보통', '어려움', '매우 어려움']
@@ -8,6 +7,7 @@ const DIFF_LABELS = ['', '매우 쉬움', '쉬움', '보통', '어려움', '매�
 export default function EmployeeEvaluation() {
   const [step, setStep] = useState(0)
   const [selectedEmployee, setSelectedEmployee] = useState('')
+  const [employees, setEmployees] = useState([])
   const [tasks, setTasks] = useState([])
   const [assignments, setAssignments] = useState({})
   const [difficultyRatings, setDifficultyRatings] = useState({})
@@ -18,9 +18,10 @@ export default function EmployeeEvaluation() {
 
   useEffect(() => {
     async function load() {
-      const [t, a] = await Promise.all([getTasks(), getAssignments()])
+      const [t, a, emp] = await Promise.all([getTasks(), getAssignments(), getEmployees()])
       setTasks(t || [])
       setAssignments(a || {})
+      setEmployees(emp || [])
       setLoading(false)
     }
     load()
@@ -85,9 +86,9 @@ export default function EmployeeEvaluation() {
           <div className="card">
             <h2>직원을 선택해주세요</h2>
             <div className="employee-select-grid">
-              {EMPLOYEES.map((emp) => (
+              {employees.map((emp) => (
                 <button
-                  key={emp.name}
+                  key={emp.id}
                   className={`emp-select-btn ${selectedEmployee === emp.name ? 'selected' : ''}`}
                   onClick={() => handleEmployeeSelect(emp.name)}
                 >
@@ -97,14 +98,10 @@ export default function EmployeeEvaluation() {
               ))}
             </div>
             {alreadySubmitted && (
-              <div className="alert-info">
-                이미 평가를 제출하셨습니다. 다시 제출하면 기존 내용이 덮어씌워집니다.
-              </div>
+              <div className="alert-info">이미 평가를 제출하셨습니다. 다시 제출하면 기존 내용이 덮어씌워집니다.</div>
             )}
             <div className="step-actions">
-              <button className="btn-primary" disabled={!selectedEmployee} onClick={() => setStep(1)}>
-                다음
-              </button>
+              <button className="btn-primary" disabled={!selectedEmployee} onClick={() => setStep(1)}>다음</button>
             </div>
           </div>
         )}
@@ -127,12 +124,8 @@ export default function EmployeeEvaluation() {
                       </div>
                       <div className="slider-row">
                         <span className="slider-edge">1</span>
-                        <input
-                          type="range" min="1" max="5"
-                          value={rating}
-                          onChange={(e) =>
-                            setDifficultyRatings((prev) => ({ ...prev, [task.id]: Number(e.target.value) }))
-                          }
+                        <input type="range" min="1" max="5" value={rating}
+                          onChange={(e) => setDifficultyRatings((prev) => ({ ...prev, [task.id]: Number(e.target.value) }))}
                           className="rating-slider"
                         />
                         <span className="slider-edge">5</span>
@@ -188,14 +181,7 @@ export default function EmployeeEvaluation() {
             <div className="completion-icon">✅</div>
             <h2>제출 완료!</h2>
             <p>{selectedEmployee}님의 자기평가가 성공적으로 제출되었습니다.</p>
-            <button
-              className="btn-primary"
-              onClick={() => {
-                setStep(0)
-                setSelectedEmployee('')
-                setAlreadySubmitted(false)
-              }}
-            >
+            <button className="btn-primary" onClick={() => { setStep(0); setSelectedEmployee(''); setAlreadySubmitted(false) }}>
               다른 직원 평가하기
             </button>
           </div>
