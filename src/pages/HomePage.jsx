@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { getWorkflowStatus } from '../lib/storage'
 
 const STAGE_LABEL = {
-  survey: '자기평가 수집 중',
+  survey: '업무 난이도 의견 수집 중',
   director_review: '부장 검토 대기',
   confirmed: '업무분장 확정 완료',
 }
@@ -32,14 +32,14 @@ export default function HomePage() {
           <Link to="/survey" className="role-card role-employee">
             <div className="role-icon">👤</div>
             <div className="role-name">직원</div>
-            <div className="role-desc">자기평가 제출하기</div>
+            <div className="role-desc">의견 제출하기</div>
             <div className="role-arrow">→</div>
           </Link>
 
           <Link to="/manager" className="role-card role-manager">
             <div className="role-icon">📋</div>
             <div className="role-name">팀장</div>
-            <div className="role-desc">평가 결과 확인 및 관리</div>
+            <div className="role-desc">의견 결과 확인 및 관리</div>
             <div className="role-arrow">→</div>
           </Link>
 

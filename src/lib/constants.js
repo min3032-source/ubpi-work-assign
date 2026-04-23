@@ -12,6 +12,16 @@ export const GRADE_OPTIONS = ['책임', '선임', '주임']
 export const TYPE_OPTIONS = ['정규직', '계약직', '육아휴직대체']
 export const PROJECTS = ['U-시리즈', '청년아카데미', '로컬창업', '소상공인', '마을기업']
 
+export const COMMON_TASKS = [
+  { id: 'common_0', name: '팀 회의자료 작성', project: '공통업무' },
+  { id: 'common_1', name: '홈페이지 공고 담당', project: '공통업무' },
+  { id: 'common_2', name: '문서관리', project: '공통업무' },
+  { id: 'common_3', name: '도서·자산관리', project: '공통업무' },
+  { id: 'common_4', name: '부서 요청자료 취합', project: '공통업무' },
+  { id: 'common_5', name: '직원 교육훈련 담당', project: '공통업무' },
+  { id: 'common_6', name: '주간·월간 보고자료', project: '공통업무' },
+]
+
 export const PROJECT_TASKS = {
   'U-시리즈': [
     '교육 프로그램 운영', '기술·제품 실증 및 개발지원', '맞춤형 창업공간 지원',

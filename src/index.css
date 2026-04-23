@@ -2173,3 +2173,28 @@ body {
 }
 
 .ann-role { font-size: 10px; opacity: 0.7; }
+
+/* ── Rating Project Groups (Survey Step 2) ── */
+.rating-project-group {
+  margin-bottom: 24px;
+}
+.rating-project-group:last-child {
+  margin-bottom: 0;
+}
+.rating-project-header {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-light);
+  padding: 6px 14px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  border: 1px solid #bfdbfe;
+}
+/* 공통업무 구분 색상 */
+.rating-project-header.common-header,
+.desired-project-header.common-header {
+  color: #7c3aed;
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { PROJECTS } from '../lib/constants'
+import { PROJECTS, COMMON_TASKS } from '../lib/constants'
 import {
   getTasks, getAssignments, getSecondaryAssignments,
   getEvaluations, saveEvaluation, getEmployees,
@@ -44,14 +44,9 @@ export default function SurveyPage() {
     load()
   }, [])
 
-  const myTasks = tasks
-    .filter((t) => assignments[t.id] === selectedEmployee || secondaryAssignments[t.id] === selectedEmployee)
-    .map((t) => ({ ...t, role: assignments[t.id] === selectedEmployee ? '정담당' : '부담당' }))
-
   const handleEmployeeSelect = async (name) => {
     setSelectedEmployee(name)
     const evals = await getEvaluations()
-    const myT = tasks.filter((t) => assignments[t.id] === name || secondaryAssignments[t.id] === name)
     if (evals[name]) {
       setAlreadySubmitted(true)
       setDifficultyRatings(evals[name].difficultyRatings || {})
@@ -61,7 +56,8 @@ export default function SurveyPage() {
     } else {
       setAlreadySubmitted(false)
       const init = {}
-      myT.forEach((t) => { init[t.id] = 3 })
+      tasks.forEach((t) => { init[t.id] = 3 })
+      COMMON_TASKS.forEach((ct) => { init[ct.id] = 3 })
       setDifficultyRatings(init)
       setDifficultyNotes({})
       setDesiredTasks([])
@@ -113,13 +109,17 @@ export default function SurveyPage() {
 
   if (loading) return <div className="page"><div className="empty-state">불러오는 중...</div></div>
 
+  const taskGroups = PROJECTS
+    .filter((p) => tasks.some((t) => t.project === p))
+    .map((p) => ({ project: p, taskList: tasks.filter((t) => t.project === p) }))
+
   return (
     <div className="page">
       <Link to="/" className="back-link">← 메인으로</Link>
 
       <div className="page-header">
-        <h1>직원 자기평가</h1>
-        <p>업무 난이도 의견과 희망업무를 입력해주세요</p>
+        <h1>업무 난이도 의견 제출</h1>
+        <p>업무별 난이도에 대한 의견을 입력해주세요. 결과는 팀장·부장님이 업무분장 결정에 참고합니다.</p>
       </div>
 
       <div className="steps">
@@ -157,55 +157,89 @@ export default function SurveyPage() {
           </div>
         )}
 
-        {/* 2단계: 난이도 의견 */}
+        {/* 2단계: 전체 업무 난이도 의견 */}
         {step === 1 && (
           <div className="card">
             <h2>{selectedEmployee}님 — 업무 난이도 의견</h2>
-            <p className="step-desc">팀장이 설정한 난이도와 본인의 체감 난이도를 비교해주세요. 의견 메모도 남길 수 있습니다.</p>
-            {myTasks.length === 0 ? (
-              <div className="empty-state">배정된 업무가 없습니다. 팀장에게 문의하세요.</div>
-            ) : (
-              <div className="rating-list">
-                {myTasks.map((task) => {
-                  const rating = difficultyRatings[task.id] ?? 3
-                  const gap = Math.abs(rating - task.difficulty)
-                  const lv = levelInfo(task.difficulty)
+            <p className="step-desc">각 업무의 난이도에 대한 의견을 1~5점으로 입력해주세요. 의견 메모도 남길 수 있습니다.</p>
+            <div className="rating-list">
+              {taskGroups.map(({ project, taskList }) => (
+                <div key={project} className="rating-project-group">
+                  <div className="rating-project-header">{project}</div>
+                  {taskList.map((task) => {
+                    const rating = difficultyRatings[task.id] ?? 3
+                    const lv = levelInfo(task.difficulty)
+                    const isCurrent = assignments[task.id] === selectedEmployee || secondaryAssignments[task.id] === selectedEmployee
+                    return (
+                      <div key={task.id} className="rating-item">
+                        <div className="rating-task-header">
+                          <div className="rating-task-title">
+                            <span className="rating-task-name">{task.name}</span>
+                            {isCurrent && <span className="current-badge">현재 담당</span>}
+                          </div>
+                          <div className="rating-manager-info">
+                            <span className={`diff-level-badge ${lv.cls}`}>{lv.label}</span>
+                            <span className="rating-manager-diff">팀장 설정: {task.difficulty}점</span>
+                          </div>
+                        </div>
+                        <div className="slider-row">
+                          <span className="slider-edge">1</span>
+                          <input type="range" min="1" max="5" value={rating}
+                            onChange={(e) => setDifficultyRatings((prev) => ({ ...prev, [task.id]: Number(e.target.value) }))}
+                            className="rating-slider" />
+                          <span className="slider-edge">5</span>
+                        </div>
+                        <div className="slider-value-row">
+                          <span className="slider-value-label">내 의견: {DIFF_LABELS[rating]} ({rating}점)</span>
+                        </div>
+                        <input
+                          type="text"
+                          className="memo-input"
+                          placeholder="의견 메모 (선택 입력)"
+                          value={difficultyNotes[task.id] || ''}
+                          onChange={(e) => setDifficultyNotes((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                          maxLength={100}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+              {/* 공통업무 */}
+              <div className="rating-project-group">
+                <div className="rating-project-header common-header">공통업무</div>
+                {COMMON_TASKS.map((ct) => {
+                  const rating = difficultyRatings[ct.id] ?? 3
                   return (
-                    <div key={task.id} className="rating-item">
+                    <div key={ct.id} className="rating-item">
                       <div className="rating-task-header">
                         <div className="rating-task-title">
-                          <span className="rating-task-name">{task.name}</span>
-                          <span className={`role-badge ${task.role === '정담당' ? 'primary-role' : 'secondary-role'}`}>{task.role}</span>
-                        </div>
-                        <div className="rating-manager-info">
-                          <span className={`diff-level-badge ${lv.cls}`}>{lv.label}</span>
-                          <span className="rating-manager-diff">팀장 설정: {task.difficulty}점</span>
+                          <span className="rating-task-name">{ct.name}</span>
                         </div>
                       </div>
                       <div className="slider-row">
                         <span className="slider-edge">1</span>
                         <input type="range" min="1" max="5" value={rating}
-                          onChange={(e) => setDifficultyRatings((prev) => ({ ...prev, [task.id]: Number(e.target.value) }))}
+                          onChange={(e) => setDifficultyRatings((prev) => ({ ...prev, [ct.id]: Number(e.target.value) }))}
                           className="rating-slider" />
                         <span className="slider-edge">5</span>
                       </div>
                       <div className="slider-value-row">
                         <span className="slider-value-label">내 의견: {DIFF_LABELS[rating]} ({rating}점)</span>
-                        {gap >= 2 && <span className="diff-warning">⚠ {gap}점 차이</span>}
                       </div>
                       <input
                         type="text"
                         className="memo-input"
                         placeholder="의견 메모 (선택 입력)"
-                        value={difficultyNotes[task.id] || ''}
-                        onChange={(e) => setDifficultyNotes((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                        value={difficultyNotes[ct.id] || ''}
+                        onChange={(e) => setDifficultyNotes((prev) => ({ ...prev, [ct.id]: e.target.value }))}
                         maxLength={100}
                       />
                     </div>
                   )
                 })}
               </div>
-            )}
+            </div>
             <div className="step-actions">
               <button className="btn-secondary" onClick={() => setStep(0)}>← 이전</button>
               <button className="btn-primary" onClick={() => setStep(2)}>다음 →</button>
@@ -249,6 +283,33 @@ export default function SurveyPage() {
                   </div>
                 </div>
               ))}
+              {/* 공통업무 희망 신청 */}
+              <div className="desired-project-group">
+                <div className="desired-project-header common-header">공통업무</div>
+                <div className="desired-tasks-grid">
+                  {COMMON_TASKS.map((ct) => {
+                    const isChecked = desiredTasks.includes(ct.id)
+                    const priority = desiredPriorities[ct.id]
+                    return (
+                      <label key={ct.id} className={`desired-task-item ${isChecked ? 'checked' : ''}`}>
+                        <input type="checkbox" checked={isChecked} onChange={() => toggleDesired(ct.id)} />
+                        <span className="desired-task-name">{ct.name}</span>
+                        {isChecked && (
+                          <select className="priority-select"
+                            value={priority || 0}
+                            onChange={(e) => setPriority(ct.id, Number(e.target.value))}
+                            onClick={(e) => e.stopPropagation()}>
+                            <option value={0}>순위 없음</option>
+                            <option value={1}>1순위</option>
+                            <option value={2}>2순위</option>
+                            <option value={3}>3순위</option>
+                          </select>
+                        )}
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
             <div className="step-actions">
               <button className="btn-secondary" onClick={() => setStep(1)}>← 이전</button>
@@ -263,10 +324,10 @@ export default function SurveyPage() {
         {step === 3 && (
           <div className="card completion-card">
             <div className="completion-icon">✅</div>
-            <h2>제출 완료!</h2>
-            <p>{selectedEmployee}님의 자기평가가 성공적으로 제출되었습니다.</p>
+            <h2>의견 제출 완료!</h2>
+            <p>{selectedEmployee}님의 업무 난이도 의견이 성공적으로 제출되었습니다.</p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button className="btn-primary" onClick={reset}>다른 직원 평가하기</button>
+              <button className="btn-primary" onClick={reset}>다른 직원 의견 제출하기</button>
               <Link to="/" className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>
                 메인으로
               </Link>
