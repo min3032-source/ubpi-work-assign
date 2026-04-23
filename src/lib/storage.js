@@ -126,15 +126,17 @@ export const getEvaluations = async () => {
     const result = {}
     ;(evals || []).forEach((e) => {
       if (!result[e.employee_name]) {
-        result[e.employee_name] = { difficultyRatings: {}, desiredTasks: [], submittedAt: e.submitted_at }
+        result[e.employee_name] = { difficultyRatings: {}, difficultyNotes: {}, desiredTasks: [], desiredTaskPriorities: {}, submittedAt: e.submitted_at }
       }
       result[e.employee_name].difficultyRatings[e.task_id] = e.difficulty_rating
+      if (e.notes) result[e.employee_name].difficultyNotes[e.task_id] = e.notes
     })
     ;(desired || []).forEach((d) => {
       if (!result[d.employee_name]) {
-        result[d.employee_name] = { difficultyRatings: {}, desiredTasks: [] }
+        result[d.employee_name] = { difficultyRatings: {}, difficultyNotes: {}, desiredTasks: [], desiredTaskPriorities: {} }
       }
       result[d.employee_name].desiredTasks.push(d.task_id)
+      if (d.priority) result[d.employee_name].desiredTaskPriorities[d.task_id] = d.priority
     })
     return result
   }
@@ -181,10 +183,20 @@ export const saveEvaluation = async (employeeName, evaluation) => {
       supabase.from('desired_tasks').delete().eq('employee_name', employeeName),
     ])
     const evalRows = Object.entries(evaluation.difficultyRatings || {}).map(
-      ([task_id, difficulty_rating]) => ({ employee_name: employeeName, task_id, difficulty_rating, submitted_at: evaluation.submittedAt })
+      ([task_id, difficulty_rating]) => ({
+        employee_name: employeeName,
+        task_id,
+        difficulty_rating,
+        notes: evaluation.difficultyNotes?.[task_id] || null,
+        submitted_at: evaluation.submittedAt,
+      })
     )
     if (evalRows.length > 0) await supabase.from('evaluations').insert(evalRows)
-    const desiredRows = (evaluation.desiredTasks || []).map((task_id) => ({ employee_name: employeeName, task_id }))
+    const desiredRows = (evaluation.desiredTasks || []).map((taskId) => ({
+      employee_name: employeeName,
+      task_id: taskId,
+      priority: evaluation.desiredTaskPriorities?.[taskId] || null,
+    }))
     if (desiredRows.length > 0) await supabase.from('desired_tasks').insert(desiredRows)
     return
   }
@@ -193,4 +205,21 @@ export const saveEvaluation = async (employeeName, evaluation) => {
   })()
   all[employeeName] = evaluation
   localStorage.setItem('wam_evaluations', JSON.stringify(all))
+}
+
+// ── Workflow Status ──
+export const getWorkflowStatus = async () => {
+  if (sb()) {
+    const { data, error } = await supabase.from('workflow_status').select('current_stage').eq('id', 1).single()
+    if (!error && data) return data.current_stage
+  }
+  return localStorage.getItem('wam_workflow_status') || 'survey'
+}
+
+export const setWorkflowStatus = async (stage) => {
+  if (sb()) {
+    await supabase.from('workflow_status').upsert({ id: 1, current_stage: stage, updated_at: new Date().toISOString() })
+    return
+  }
+  localStorage.setItem('wam_workflow_status', stage)
 }
