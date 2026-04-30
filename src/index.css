@@ -2198,3 +2198,217 @@ body {
   background: #f5f3ff;
   border-color: #ddd6fe;
 }
+
+/* ══════════════════════════════════════════════
+   AUTH / LOGIN
+══════════════════════════════════════════════ */
+.login-wrap {
+  min-height: 100vh;
+  margin: -24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 48px 44px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: var(--shadow-md);
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 36px;
+}
+
+.login-logo-icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+
+.login-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.login-header p {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.btn-login {
+  width: 100%;
+  padding: 12px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: background 0.15s;
+}
+
+.btn-login:hover  { background: var(--primary-dark); }
+.btn-login:disabled { background: #93c5fd; cursor: not-allowed; }
+
+.alert-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #dc2626;
+}
+
+/* ── Navbar (auth) ── */
+.nav-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-user-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.nav-team-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.nav-role-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.3px;
+}
+.role-admin    { background: #f3e8ff; color: #7c3aed; }
+.role-director { background: #fff7ed; color: #ea580c; }
+.role-manager  { background: #eff6ff; color: #2563eb; }
+.role-employee { background: #ecfdf5; color: #059669; }
+
+.nav-logout-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.nav-logout-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+/* ── Admin Page ── */
+.admin-form-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.admin-form-card h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.admin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.role-badge-sm {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.emp-edit-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+}
+.org-list { display: flex; flex-direction: column; gap: 6px; }
+.org-list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.org-list-name { flex: 1; font-size: 14px; font-weight: 500; }
+.org-dept-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  padding: 0 2px;
+}
+
+/* ── Director Page ── */
+.team-selector-row { margin-bottom: 24px; }
+.team-selector-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.team-selector-btn {
+  padding: 12px 20px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+.team-selector-btn:hover { border-color: var(--primary); background: var(--primary-light); }
+.team-selector-btn.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
+.ts-name { font-size: 14px; font-weight: 600; }
+
+/* ── Steps (3-step variant) ── */
+.steps-3 .step:not(:last-child)::after {
+  left: 130px;
+  width: calc(100% - 140px);
+}
+
+/* ── btn-sm danger ── */
+.btn-sm.danger { color: var(--danger); border-color: #fecaca; }
+.btn-sm.danger:hover { background: #fef2f2; border-color: var(--danger); }

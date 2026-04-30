@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 import {
-  getTasks, getAssignments, getSecondaryAssignments,
-  getEvaluations, getEmployees, setWorkflowStatus,
-  addEmployee, updateEmployee, deleteEmployee,
+  getTasks, addTask, updateTask, deleteTask,
+  getAssignments, getSecondaryAssignments, getEvaluations, getEmployees,
+  setWorkflowStatus,
 } from '../lib/storage'
-import { GRADE_OPTIONS, TYPE_OPTIONS, COMMON_TASKS } from '../lib/constants'
+import { GRADE_OPTIONS, TYPE_OPTIONS, PROJECTS } from '../lib/constants'
 
 const levelInfo = (d) => {
   if (d <= 2) return { label: '하', cls: 'level-low' }
@@ -13,78 +14,85 @@ const levelInfo = (d) => {
   return { label: '상', cls: 'level-high' }
 }
 
+const PROJ_ORDER    = ['U-시리즈', '청년아카데미', '로컬창업', '소상공인', '마을기업', '공통업무']
 const PRIORITY_LABEL = { 1: '1순위', 2: '2순위', 3: '3순위' }
+const DIFF_LABELS    = ['', '매우 쉬움', '쉬움', '보통', '어려움', '매우 어려움']
 
 export default function ManagerPage() {
-  const [tasks, setTasks] = useState([])
-  const [assignments, setAssignments] = useState({})
-  const [secondaryAssignments, setSecondaryAssignments] = useState({})
-  const [evaluations, setEvaluations] = useState({})
-  const [employees, setEmployees] = useState([])
-  const [activeTab, setActiveTab] = useState('submission')
-  const [loading, setLoading] = useState(true)
-  const [approving, setApproving] = useState(false)
-  const [approved, setApproved] = useState(false)
-  // 직원 관리 상태
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [newEmp, setNewEmp] = useState({ name: '', grade: '선임', type: '정규직' })
-  const [editingEmpId, setEditingEmpId] = useState(null)
-  const [editForm, setEditForm] = useState({})
+  const { profile } = useAuth()
+  const navigate    = useNavigate()
+
+  const [tasks, setTasks]                     = useState([])
+  const [assignments, setAssignments]         = useState({})
+  const [secondaryAssignments, setSec]        = useState({})
+  const [evaluations, setEvaluations]         = useState({})
+  const [employees, setEmployees]             = useState([])
+  const [loading, setLoading]                 = useState(true)
+  const [activeTab, setActiveTab]             = useState('submission')
+  const [approving, setApproving]             = useState(false)
+  const [approved, setApproved]               = useState(false)
+
+  // 업무 관리 상태
+  const [newTask, setNewTask] = useState({ name: '', project: PROJECTS[0], difficulty: 3 })
+  const [showAddTask, setShowAddTask] = useState(false)
+  const [editingTaskId, setEditingTaskId] = useState(null)
+  const [editTaskForm, setEditTaskForm]   = useState({})
 
   useEffect(() => {
-    async function load() {
-      const [t, a, sa, e, emp] = await Promise.all([
-        getTasks(), getAssignments(), getSecondaryAssignments(), getEvaluations(), getEmployees(),
+    if (!profile?.team_id) return
+    ;(async () => {
+      const [t, a, sa, ev, emp] = await Promise.all([
+        getTasks(profile.team_id),
+        getAssignments(profile.team_id),
+        getSecondaryAssignments(profile.team_id),
+        getEvaluations(profile.team_id),
+        getEmployees(profile.team_id),
       ])
       setTasks(t || [])
       setAssignments(a || {})
-      setSecondaryAssignments(sa || {})
-      setEvaluations(e || {})
+      setSec(sa || {})
+      setEvaluations(ev || {})
       setEmployees(emp || [])
       setLoading(false)
-    }
-    load()
-  }, [])
+    })()
+  }, [profile])
 
   const submittedCount = employees.filter((e) => evaluations[e.name]).length
-  const submittedPct = employees.length > 0 ? Math.round((submittedCount / employees.length) * 100) : 0
+  const submittedPct   = employees.length > 0 ? Math.round((submittedCount / employees.length) * 100) : 0
 
-  // 탭2: 업무별 난이도 의견 분석 (전체 업무 + 공통업무)
-  const taskOpinions = [
-    ...tasks.map((task) => {
-      const opinions = employees
-        .filter((emp) => evaluations[emp.name]?.difficultyRatings?.[task.id] !== undefined)
-        .map((emp) => ({
-          name: emp.name,
-          rating: evaluations[emp.name].difficultyRatings[task.id],
-          note: evaluations[emp.name].difficultyNotes?.[task.id] || '',
-        }))
-      if (opinions.length === 0) return null
-      const avg = opinions.reduce((s, o) => s + o.rating, 0) / opinions.length
-      const diff = Math.abs(avg - task.difficulty)
-      return { task, opinions, avg, diff, isCommon: false }
-    }),
-    ...COMMON_TASKS.map((ct) => {
-      const opinions = employees
-        .filter((emp) => evaluations[emp.name]?.difficultyRatings?.[ct.id] !== undefined)
-        .map((emp) => ({
-          name: emp.name,
-          rating: evaluations[emp.name].difficultyRatings[ct.id],
-          note: evaluations[emp.name].difficultyNotes?.[ct.id] || '',
-        }))
-      if (opinions.length === 0) return null
-      const avg = opinions.reduce((s, o) => s + o.rating, 0) / opinions.length
-      return { task: { ...ct, difficulty: null }, opinions, avg, diff: 0, isCommon: true }
-    }),
-  ].filter(Boolean).sort((a, b) => b.diff - a.diff)
+  // 업무량 포인트 계산 (직급별 가중치)
+  const gradeWeight = { 책임: 1.3, 선임: 1.0, 주임: 0.8 }
+  const empPoints = employees.map((emp) => {
+    const empTasks = tasks.filter(
+      (t) => assignments[t.id] === emp.name || secondaryAssignments[t.id] === emp.name,
+    )
+    const rawPoints = empTasks.reduce(
+      (s, t) => s + (t.difficulty || 3) * (secondaryAssignments[t.id] === emp.name ? 0.5 : 1),
+      0,
+    )
+    const weight = gradeWeight[emp.grade] || 1.0
+    return { emp, rawPoints, weightedPoints: rawPoints / weight, taskCount: empTasks.length }
+  })
+  const maxPts = Math.max(...empPoints.map((e) => e.rawPoints), 1)
 
-  // 탭3: 희망업무 현황 (전체 업무 + 공통업무)
-  const allTasksForDesired = [
-    ...tasks,
-    ...COMMON_TASKS.map((ct) => ({ ...ct, difficulty: null })),
-  ]
+  // 난이도 분석
+  const taskOpinions = tasks.map((task) => {
+    const opinions = employees
+      .filter((emp) => evaluations[emp.name]?.difficultyRatings?.[task.id] !== undefined)
+      .map((emp) => ({
+        name: emp.name,
+        rating: evaluations[emp.name].difficultyRatings[task.id],
+        note: evaluations[emp.name].difficultyNotes?.[task.id] || '',
+      }))
+    if (opinions.length === 0) return null
+    const avg     = opinions.reduce((s, o) => s + o.rating, 0) / opinions.length
+    const isCommon = task.project === '공통업무'
+    const diff    = isCommon ? 0 : Math.abs(avg - task.difficulty)
+    return { task, opinions, avg, diff, isCommon }
+  }).filter(Boolean).sort((a, b) => b.diff - a.diff)
 
-  const desiredByTask = allTasksForDesired.map((task) => {
+  // 희망업무 분석
+  const desiredByTask = tasks.map((task) => {
     const wants = { 1: [], 2: [], 3: [], other: [] }
     employees.forEach((emp) => {
       const ev = evaluations[emp.name]
@@ -101,74 +109,89 @@ export default function ManagerPage() {
     const ev = evaluations[emp.name]
     if (!ev?.desiredTasks?.length) return null
     const list = ev.desiredTasks
-      .map((taskId) => {
-        const task = allTasksForDesired.find((t) => t.id === taskId)
-        return { task, priority: ev.desiredTaskPriorities?.[taskId] || 0 }
+      .map((id) => {
+        const task = tasks.find((t) => t.id === id)
+        return task ? { task, priority: ev.desiredTaskPriorities?.[id] || 0 } : null
       })
-      .filter((d) => d.task)
+      .filter(Boolean)
       .sort((a, b) => (a.priority || 99) - (b.priority || 99))
     return { emp, list }
   }).filter(Boolean)
 
   const handleApprove = async () => {
-    if (!window.confirm(`팀장 검토를 완료하고 부장에게 전달하시겠습니까?\n(${submittedCount}/${employees.length}명 의견 제출 완료)`)) return
+    if (!window.confirm(`팀장 검토를 완료하고 부장에게 전달하시겠습니까?\n(${submittedCount}/${employees.length}명 제출)`)) return
     setApproving(true)
-    await setWorkflowStatus('director_review')
+    await setWorkflowStatus('director_review', profile.team_id)
     setApproving(false)
     setApproved(true)
   }
 
-  // 직원 관리 핸들러
-  const handleAddEmp = async () => {
-    if (!newEmp.name.trim()) return
-    const added = await addEmployee({ name: newEmp.name.trim(), grade: newEmp.grade, type: newEmp.type })
-    setEmployees((prev) => [...prev, added])
-    setNewEmp({ name: '', grade: '선임', type: '정규직' })
-    setShowAddForm(false)
+  // ── 업무 CRUD ──
+  const handleAddTask = async () => {
+    if (!newTask.name.trim()) return
+    const t = await addTask({
+      id: `t${Date.now()}`,
+      name: newTask.name.trim(),
+      project: newTask.project,
+      difficulty: newTask.difficulty,
+      team_id: profile.team_id,
+    })
+    setTasks((p) => [...p, t])
+    setNewTask({ name: '', project: PROJECTS[0], difficulty: 3 })
+    setShowAddTask(false)
   }
 
-  const handleStartEdit = (emp) => {
-    setEditingEmpId(emp.id)
-    setEditForm({ name: emp.name, grade: emp.grade, type: emp.type })
+  const handleSaveTask = async () => {
+    await updateTask(editingTaskId, {
+      name: editTaskForm.name,
+      project: editTaskForm.project,
+      difficulty: editTaskForm.difficulty,
+    })
+    setTasks((p) => p.map((t) => t.id === editingTaskId ? { ...t, ...editTaskForm } : t))
+    setEditingTaskId(null)
   }
 
-  const handleSaveEdit = async () => {
-    await updateEmployee(editingEmpId, editForm)
-    setEmployees((prev) => prev.map((e) => e.id === editingEmpId ? { ...e, ...editForm } : e))
-    setEditingEmpId(null)
+  const handleDeleteTask = async (id) => {
+    if (!window.confirm('업무를 삭제하시겠습니까?')) return
+    await deleteTask(id)
+    setTasks((p) => p.filter((t) => t.id !== id))
   }
 
-  const handleDeleteEmp = async (id) => {
-    if (!window.confirm('직원을 삭제하시겠습니까?')) return
-    await deleteEmployee(id)
-    setEmployees((prev) => prev.filter((e) => e.id !== id))
-  }
+  const taskGroups = PROJ_ORDER
+    .filter((p) => tasks.some((t) => t.project === p))
+    .map((p) => ({ project: p, list: tasks.filter((t) => t.project === p) }))
 
   const TABS = [
-    { key: 'submission', label: `의견 현황 (${submittedCount}/${employees.length})` },
+    { key: 'submission', label: `제출 현황 (${submittedCount}/${employees.length})` },
     { key: 'difficulty', label: `난이도 분석 (${taskOpinions.length})` },
-    { key: 'desired', label: `희망업무 (${desiredByTask.length})` },
-    { key: 'employees', label: '직원 관리' },
+    { key: 'desired',    label: `희망업무 (${desiredByTask.length})` },
+    { key: 'tasks',      label: `업무 관리 (${tasks.length})` },
+    { key: 'balance',    label: '업무량 균형' },
   ]
 
-  if (loading) return <div className="page"><div className="empty-state">불러오는 중...</div></div>
+  if (!profile) return null
+  if (loading)  return <div className="page"><div className="empty-state">불러오는 중...</div></div>
 
   return (
     <div className="page">
-      <Link to="/" className="back-link">← 메인으로</Link>
-
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1>팀장 관리화면</h1>
-          <p>업무 난이도 의견 결과를 확인하세요</p>
+          <h1>팀장 화면</h1>
+          <p>{profile.teams?.departments?.name} &gt; {profile.teams?.name}</p>
         </div>
-        {approved ? (
-          <div className="badge-status success" style={{ padding: '10px 18px', fontSize: 14 }}>✅ 부장에게 전달 완료</div>
-        ) : (
-          <button className="btn-approve" disabled={approving} onClick={handleApprove}>
-            {approving ? '처리 중...' : '✅ 팀장 승인 → 부장에게 전달'}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-secondary" style={{ fontSize: 13 }}
+            onClick={() => navigate(`/assign?teamId=${profile.team_id}`)}>
+            업무 배정 →
           </button>
-        )}
+          {approved ? (
+            <div className="badge-status success" style={{ padding: '8px 16px' }}>✅ 부장에게 전달 완료</div>
+          ) : (
+            <button className="btn-approve" disabled={approving} onClick={handleApprove}>
+              {approving ? '처리 중...' : '✅ 부장에게 전달'}
+            </button>
+          )}
+        </div>
       </div>
 
       {submittedCount < employees.length && !approved && (
@@ -179,25 +202,25 @@ export default function ManagerPage() {
 
       <div className="tabs">
         {TABS.map((tab) => (
-          <button key={tab.key} className={`tab ${activeTab === tab.key ? 'active' : ''}`} onClick={() => setActiveTab(tab.key)}>
+          <button key={tab.key} className={`tab ${activeTab === tab.key ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.key)}>
             {tab.label}
           </button>
         ))}
       </div>
 
-      {/* 탭1: 의견 현황 */}
+      {/* 탭1: 제출 현황 */}
       {activeTab === 'submission' && (
         <div className="section-body">
           <div className="progress-section">
             <div className="progress-header">
-              <span className="progress-label">{submittedCount}/{employees.length}명 의견 제출 완료</span>
+              <span className="progress-label">{submittedCount}/{employees.length}명 제출 완료</span>
               <span className="progress-pct">{submittedPct}%</span>
             </div>
             <div className="progress-bar-wrap">
               <div className="progress-fill" style={{ width: `${submittedPct}%` }} />
             </div>
           </div>
-
           <div className="emp-status-list">
             {employees.map((emp) => {
               const ev = evaluations[emp.name]
@@ -226,7 +249,7 @@ export default function ManagerPage() {
         </div>
       )}
 
-      {/* 탭2: 난이도 의견 분석 */}
+      {/* 탭2: 난이도 분석 */}
       {activeTab === 'difficulty' && (
         <div className="section-body">
           {taskOpinions.length === 0 ? (
@@ -234,7 +257,7 @@ export default function ManagerPage() {
           ) : (
             <div className="opinion-list">
               {taskOpinions.map(({ task, opinions, avg, diff, isCommon }) => {
-                const lv = task.difficulty ? levelInfo(task.difficulty) : null
+                const lv    = task.difficulty ? levelInfo(task.difficulty) : null
                 const isBig = !isCommon && diff >= 1.5
                 return (
                   <div key={task.id} className={`opinion-card ${isBig ? 'big-diff' : ''}`}>
@@ -282,7 +305,7 @@ export default function ManagerPage() {
         </div>
       )}
 
-      {/* 탭3: 희망업무 현황 */}
+      {/* 탭3: 희망업무 */}
       {activeTab === 'desired' && (
         <div className="section-body">
           {desiredByTask.length === 0 ? (
@@ -317,8 +340,7 @@ export default function ManagerPage() {
                   )
                 })}
               </div>
-
-              <h3 className="section-sub-title" style={{ marginTop: 28 }}>직원별 희망업무 목록</h3>
+              <h3 className="section-sub-title" style={{ marginTop: 28 }}>직원별 희망업무</h3>
               <div className="emp-desired-list">
                 {desiredByEmployee.map(({ emp, list }) => (
                   <div key={emp.id} className="emp-desired-row">
@@ -339,84 +361,125 @@ export default function ManagerPage() {
         </div>
       )}
 
-      {/* 탭4: 직원 관리 */}
-      {activeTab === 'employees' && (
+      {/* 탭4: 업무 관리 */}
+      {activeTab === 'tasks' && (
         <div className="section-body">
           <div className="mgmt-header">
-            <span className="mgmt-count">전체 {employees.length}명</span>
-            <button
-              className="btn-primary"
-              style={{ fontSize: 13, padding: '7px 14px' }}
-              onClick={() => { setShowAddForm(!showAddForm); setEditingEmpId(null) }}>
-              + 직원 추가
+            <span className="mgmt-count">전체 {tasks.length}개 업무</span>
+            <button className="btn-primary" style={{ fontSize: 13, padding: '7px 14px' }}
+              onClick={() => setShowAddTask((v) => !v)}>
+              + 업무 추가
             </button>
           </div>
 
-          {showAddForm && (
-            <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '14px 16px', marginBottom: 14 }}>
+          {showAddTask && (
+            <div className="admin-form-card" style={{ marginBottom: 16 }}>
               <div className="form-row">
-                <input
-                  className="form-input"
-                  placeholder="이름"
-                  value={newEmp.name}
-                  onChange={(e) => setNewEmp((prev) => ({ ...prev, name: e.target.value }))}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddEmp()}
-                />
-                <select className="form-select" value={newEmp.grade}
-                  onChange={(e) => setNewEmp((prev) => ({ ...prev, grade: e.target.value }))}>
-                  {GRADE_OPTIONS.map((g) => <option key={g} value={g}>{g}</option>)}
+                <input className="form-input" placeholder="업무명"
+                  value={newTask.name}
+                  onChange={(e) => setNewTask((p) => ({ ...p, name: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddTask()} />
+                <select className="form-select" value={newTask.project}
+                  onChange={(e) => setNewTask((p) => ({ ...p, project: e.target.value }))}>
+                  {[...PROJECTS, '공통업무'].map((p) => <option key={p}>{p}</option>)}
                 </select>
-                <select className="form-select" value={newEmp.type}
-                  onChange={(e) => setNewEmp((prev) => ({ ...prev, type: e.target.value }))}>
-                  {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                <select className="form-select" value={newTask.difficulty}
+                  onChange={(e) => setNewTask((p) => ({ ...p, difficulty: Number(e.target.value) }))}>
+                  {[1,2,3,4,5].map((n) => <option key={n} value={n}>{n}점 - {DIFF_LABELS[n]}</option>)}
                 </select>
-                <button className="btn-sm primary" onClick={handleAddEmp}>추가</button>
-                <button className="btn-sm" onClick={() => setShowAddForm(false)}>취소</button>
+                <button className="btn-sm primary" onClick={handleAddTask}>추가</button>
+                <button className="btn-sm" onClick={() => setShowAddTask(false)}>취소</button>
               </div>
             </div>
           )}
 
-          <div className="emp-status-list">
-            {employees.map((emp) => (
-              <div key={emp.id} className="emp-status-row">
-                {editingEmpId === emp.id ? (
-                  <>
-                    <div className="emp-status-info" style={{ flex: 1, gap: 8, flexWrap: 'wrap' }}>
-                      <input
-                        className="inline-input"
-                        style={{ width: 80 }}
-                        value={editForm.name}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-                      />
-                      <select className="inline-select" value={editForm.grade}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, grade: e.target.value }))}>
-                        {GRADE_OPTIONS.map((g) => <option key={g} value={g}>{g}</option>)}
-                      </select>
-                      <select className="inline-select" value={editForm.type}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, type: e.target.value }))}>
-                        {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </div>
-                    <div className="action-btns">
-                      <button className="btn-sm primary" onClick={handleSaveEdit}>저장</button>
-                      <button className="btn-sm" onClick={() => setEditingEmpId(null)}>취소</button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="emp-status-info">
-                      <span className="emp-status-name">{emp.name}</span>
-                      <span className="emp-status-meta">{emp.grade} · {emp.type}</span>
-                    </div>
-                    <div className="action-btns">
-                      <button className="btn-sm" onClick={() => handleStartEdit(emp)}>수정</button>
-                      <button className="btn-sm danger" onClick={() => handleDeleteEmp(emp.id)}>삭제</button>
-                    </div>
-                  </>
-                )}
+          {taskGroups.map(({ project, list }) => (
+            <div key={project} style={{ marginBottom: 16 }}>
+              <div className="org-dept-label">{project}</div>
+              <div className="emp-status-list">
+                {list.map((task) => (
+                  <div key={task.id} className="emp-status-row">
+                    {editingTaskId === task.id ? (
+                      <>
+                        <div className="form-row" style={{ flex: 1 }}>
+                          <input className="inline-input" value={editTaskForm.name}
+                            onChange={(e) => setEditTaskForm((p) => ({ ...p, name: e.target.value }))} />
+                          <select className="inline-select" value={editTaskForm.project}
+                            onChange={(e) => setEditTaskForm((p) => ({ ...p, project: e.target.value }))}>
+                            {[...PROJECTS, '공통업무'].map((p) => <option key={p}>{p}</option>)}
+                          </select>
+                          <select className="inline-select" value={editTaskForm.difficulty}
+                            onChange={(e) => setEditTaskForm((p) => ({ ...p, difficulty: Number(e.target.value) }))}>
+                            {[1,2,3,4,5].map((n) => <option key={n} value={n}>{n}점</option>)}
+                          </select>
+                        </div>
+                        <div className="action-btns">
+                          <button className="btn-sm primary" onClick={handleSaveTask}>저장</button>
+                          <button className="btn-sm" onClick={() => setEditingTaskId(null)}>취소</button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="emp-status-info">
+                          <span className="emp-status-name">{task.name}</span>
+                          <span className={`diff-level-badge ${levelInfo(task.difficulty).cls}`}>
+                            {levelInfo(task.difficulty).label} {task.difficulty}점
+                          </span>
+                        </div>
+                        <div className="action-btns">
+                          <button className="btn-sm" onClick={() => {
+                            setEditingTaskId(task.id)
+                            setEditTaskForm({ name: task.name, project: task.project, difficulty: task.difficulty })
+                          }}>수정</button>
+                          <button className="btn-sm danger" onClick={() => handleDeleteTask(task.id)}>삭제</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 탭5: 업무량 균형 */}
+      {activeTab === 'balance' && (
+        <div className="section-body">
+          <div className="card">
+            <h2>업무량 균형 분석</h2>
+            <p className="step-desc" style={{ marginBottom: 20 }}>
+              직급별 가중치 적용 — 책임 ×1.3 / 선임 ×1.0 / 주임 ×0.8
+            </p>
+            <div className="balance-chart">
+              {empPoints.map(({ emp, rawPoints, weightedPoints, taskCount }) => {
+                const pct   = maxPts > 0 ? (rawPoints / maxPts) * 100 : 0
+                const level = pct > 75 ? 'high' : pct > 0 ? 'normal' : 'empty'
+                return (
+                  <div key={emp.id} className="balance-row">
+                    <div className="balance-name">
+                      <span className="b-name">{emp.name}</span>
+                      <span className="b-type">{emp.grade}</span>
+                    </div>
+                    <div className="balance-bar-wrap">
+                      <div className={`balance-bar bar-${level}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="balance-stats">
+                      <span>{taskCount}개</span>
+                      <span className="b-score">난이도합 {rawPoints}</span>
+                      <span className="text-muted" style={{ fontSize: 11 }}>
+                        가중 {weightedPoints.toFixed(1)}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="balance-legend">
+              <span><span className="dot bar-high" /> 높음</span>
+              <span><span className="dot bar-normal" /> 적정</span>
+              <span><span className="dot bar-empty" /> 미배정</span>
+            </div>
           </div>
         </div>
       )}

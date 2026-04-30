@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { INITIAL_TASKS, PROJECTS } from '../lib/constants'
+import { useAuth } from '../contexts/AuthContext'
 import {
   getTasks, saveTasks, getAssignments, saveAssignments,
   getSecondaryAssignments, saveSecondaryAssignments, getEmployees,
@@ -8,6 +10,10 @@ import {
 const DIFF_LABELS = ['', '쉬움', '보통', '어려움', '매우 어려움', '최고']
 
 export default function WorkAssignment() {
+  const { profile } = useAuth()
+  const [searchParams] = useSearchParams()
+  const teamId = searchParams.get('teamId') || profile?.team_id || null
+
   const [tasks, setTasks] = useState([])
   const [assignments, setAssignments] = useState({})
   const [secondaryAssignments, setSecondaryAssignments] = useState({})
@@ -23,7 +29,8 @@ export default function WorkAssignment() {
     async function load() {
       setLoading(true)
       const [t, a, sa, emp] = await Promise.all([
-        getTasks(), getAssignments(), getSecondaryAssignments(), getEmployees(),
+        getTasks(teamId), getAssignments(teamId),
+        getSecondaryAssignments(teamId), getEmployees(teamId),
       ])
       setTasks(t || INITIAL_TASKS)
       setAssignments(a || {})
@@ -31,11 +38,11 @@ export default function WorkAssignment() {
       setEmployees(emp || [])
       setLoading(false)
     }
-    load()
-  }, [])
+    if (teamId) load()
+  }, [teamId])
 
-  const updateAssignments = (next) => { setAssignments(next); saveAssignments(next) }
-  const updateSecondaryAssignments = (next) => { setSecondaryAssignments(next); saveSecondaryAssignments(next) }
+  const updateAssignments = (next) => { setAssignments(next); saveAssignments(next, teamId) }
+  const updateSecondaryAssignments = (next) => { setSecondaryAssignments(next); saveSecondaryAssignments(next, teamId) }
 
   const handleDrop = (e, employeeName) => {
     e.preventDefault()
