@@ -12,7 +12,7 @@ export function AuthProvider({ children }) {
     if (!authUser) { setProfile(null); return null }
     const { data } = await supabase
       .from('employees')
-      .select('*, teams(id, name, departments(id, name))')
+      .select('*')
       .eq('auth_user_id', authUser.id)
       .single()
     setProfile(data || null)
