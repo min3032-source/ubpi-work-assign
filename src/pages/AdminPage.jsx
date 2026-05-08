@@ -245,13 +245,15 @@ export default function AdminPage() {
                     {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                   </select>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">직급</label>
-                  <select className="form-select" value={createForm.grade}
-                    onChange={(e) => setCreateForm((p) => ({ ...p, grade: e.target.value }))}>
-                    {GRADE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
-                  </select>
-                </div>
+                {createForm.role !== 'manager' && (
+                  <div className="form-group">
+                    <label className="form-label">직급</label>
+                    <select className="form-select" value={createForm.grade}
+                      onChange={(e) => setCreateForm((p) => ({ ...p, grade: e.target.value }))}>
+                      {GRADE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div className="form-group">
                   <label className="form-label">근무형태</label>
                   <select className="form-select" value={createForm.type}
@@ -301,10 +303,12 @@ export default function AdminPage() {
                           onChange={(e) => setEditForm((p) => ({ ...p, role: e.target.value }))}>
                           {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                         </select>
-                        <select className="inline-select" value={editForm.grade}
-                          onChange={(e) => setEditForm((p) => ({ ...p, grade: e.target.value }))}>
-                          {GRADE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
-                        </select>
+                        {editForm.role !== 'manager' && (
+                          <select className="inline-select" value={editForm.grade}
+                            onChange={(e) => setEditForm((p) => ({ ...p, grade: e.target.value }))}>
+                            {GRADE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
+                          </select>
+                        )}
                         <select className="inline-select" value={editForm.type}
                           onChange={(e) => setEditForm((p) => ({ ...p, type: e.target.value }))}>
                           {TYPE_OPTIONS.map((t) => <option key={t}>{t}</option>)}
