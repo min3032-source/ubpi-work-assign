@@ -106,10 +106,24 @@ export default function AdminPage() {
       name: emp.name, grade: emp.grade, type: emp.type,
       role: emp.role, email: emp.email || '',
       team_id: emp.team_id || '',
+      password: '',
     })
   }
 
   const handleSaveEdit = async () => {
+    if (editForm.password) {
+      const emp = employees.find((e) => e.id === editingId)
+      if (!supabaseAdmin) {
+        alert('비밀번호 변경에는 VITE_SUPABASE_SERVICE_KEY가 필요합니다.')
+        return
+      }
+      if (emp?.auth_user_id) {
+        const { error } = await supabaseAdmin.auth.admin.updateUserById(emp.auth_user_id, {
+          password: editForm.password,
+        })
+        if (error) { alert('비밀번호 변경 실패: ' + error.message); return }
+      }
+    }
     await updateEmployee(editingId, {
       name: editForm.name, grade: editForm.grade, type: editForm.type,
       role: editForm.role, email: editForm.email || null,
@@ -306,6 +320,10 @@ export default function AdminPage() {
                             </optgroup>
                           ))}
                         </select>
+                        <input className="inline-input" type="password"
+                          value={editForm.password || ''}
+                          onChange={(e) => setEditForm((p) => ({ ...p, password: e.target.value }))}
+                          placeholder="새 비밀번호 (선택사항)" />
                       </div>
                       <div className="action-btns">
                         <button className="btn-sm primary" onClick={handleSaveEdit}>저장</button>
