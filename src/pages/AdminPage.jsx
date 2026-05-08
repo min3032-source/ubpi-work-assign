@@ -63,19 +63,23 @@ export default function AdminPage() {
       setCreateError('이름, 이메일, 비밀번호는 필수입니다.')
       return
     }
-    if (!supabaseAdmin) {
-      setCreateError('VITE_SUPABASE_SERVICE_KEY가 설정되지 않았습니다. .env.local을 확인하세요.')
-      return
-    }
     setCreating(true)
     setCreateError('')
 
-    const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+    // 관리자 세션에 영향을 주지 않도록 격리된 임시 클라이언트 사용
+    const { createClient } = await import('@supabase/supabase-js')
+    const tmpClient = createClient(
+      import.meta.env.VITE_SUPABASE_URL,
+      import.meta.env.VITE_SUPABASE_ANON_KEY,
+      { auth: { persistSession: false, autoRefreshToken: false } }
+    )
+
+    const { data: authData, error: authErr } = await tmpClient.auth.signUp({
       email: createForm.email,
       password: createForm.password,
-      email_confirm: true,
     })
     if (authErr) { setCreateError(authErr.message); setCreating(false); return }
+    if (!authData.user) { setCreateError('계정 생성에 실패했습니다. 이미 존재하는 이메일일 수 있습니다.'); setCreating(false); return }
 
     const { data: emp, error: empErr } = await supabase.from('employees').insert([{
       name: createForm.name,
@@ -85,7 +89,7 @@ export default function AdminPage() {
       email: createForm.email,
       auth_user_id: authData.user.id,
       team_id: createForm.teamId || null,
-    }]).select('*, teams(id, name, departments(id, name))').single()
+    }]).select('*').single()
 
     if (empErr) { setCreateError(empErr.message); setCreating(false); return }
 
@@ -197,12 +201,6 @@ export default function AdminPage() {
               + 계정 생성
             </button>
           </div>
-
-          {!supabaseAdmin && (
-            <div className="alert-warning" style={{ marginBottom: 14 }}>
-              ⚠ VITE_SUPABASE_SERVICE_KEY가 없습니다. 계정 생성 기능을 사용하려면 .env.local에 추가하세요.
-            </div>
-          )}
 
           {showCreateForm && (
             <div className="admin-form-card">
