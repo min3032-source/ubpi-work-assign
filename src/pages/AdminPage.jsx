@@ -245,7 +245,7 @@ export default function AdminPage() {
                     {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                   </select>
                 </div>
-                {createForm.role !== 'manager' && (
+                {!['manager', '팀장'].includes(createForm.role) && (
                   <div className="form-group">
                     <label className="form-label">직급</label>
                     <select className="form-select" value={createForm.grade}
@@ -303,7 +303,7 @@ export default function AdminPage() {
                           onChange={(e) => setEditForm((p) => ({ ...p, role: e.target.value }))}>
                           {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                         </select>
-                        {editForm.role !== 'manager' && (
+                        {!['manager', '팀장'].includes(editForm.role) && (
                           <select className="inline-select" value={editForm.grade}
                             onChange={(e) => setEditForm((p) => ({ ...p, grade: e.target.value }))}>
                             {GRADE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
