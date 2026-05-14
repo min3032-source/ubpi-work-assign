@@ -51,8 +51,10 @@ export function AuthProvider({ children }) {
 
   const refreshProfile = () => fetchProfile(user)
 
+  const updateProfile = (updates) => setProfile((p) => p ? { ...p, ...updates } : p)
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, refreshProfile, updateProfile }}>
       {children}
     </AuthContext.Provider>
   )

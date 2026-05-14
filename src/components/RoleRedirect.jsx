@@ -13,6 +13,7 @@ export default function RoleRedirect() {
 
   if (loading) return <div className="page"><div className="empty-state">로딩 중...</div></div>
   if (!user || !profile) return <Navigate to="/login" replace />
+  if (profile.is_first_login) return <Navigate to="/change-password" replace />
 
   return <Navigate to={ROLE_ROUTES[profile.role] || '/login'} replace />
 }

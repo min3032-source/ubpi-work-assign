@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import RoleRedirect from './components/RoleRedirect'
 import Navbar from './components/Navbar'
 import LoginPage from './pages/LoginPage'
+import ChangePasswordPage from './pages/ChangePasswordPage'
 import EmployeePage from './pages/EmployeePage'
 import ManagerPage from './pages/ManagerPage'
 import DirectorPage from './pages/DirectorPage'
@@ -18,8 +19,9 @@ export default function App() {
           <Navbar />
           <main className="main-content">
             <Routes>
-              <Route path="/login"    element={<LoginPage />} />
-              <Route path="/"         element={<RoleRedirect />} />
+              <Route path="/login"           element={<LoginPage />} />
+              <Route path="/change-password" element={<ChangePasswordPage />} />
+              <Route path="/"               element={<RoleRedirect />} />
               <Route path="/employee" element={
                 <ProtectedRoute roles={['employee']}>
                   <EmployeePage />

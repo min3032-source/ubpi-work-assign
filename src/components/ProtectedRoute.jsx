@@ -7,6 +7,7 @@ export default function ProtectedRoute({ children, roles }) {
   if (loading) return <div className="page"><div className="empty-state">로딩 중...</div></div>
   if (!user)    return <Navigate to="/login" replace />
   if (!profile) return <Navigate to="/login" replace />
+  if (profile.is_first_login) return <Navigate to="/change-password" replace />
   if (roles && !roles.includes(profile.role)) return <Navigate to="/" replace />
 
   return children

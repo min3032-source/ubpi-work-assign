@@ -26,6 +26,7 @@ export default function AdminPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [createForm, setCreateForm]         = useState(EMPTY_FORM)
   const [createError, setCreateError]       = useState('')
+  const [createSuccess, setCreateSuccess]   = useState('')
   const [creating, setCreating]             = useState(false)
 
   const [editingId, setEditingId] = useState(null)
@@ -64,23 +65,20 @@ export default function AdminPage() {
       setCreateError('이름, 이메일, 비밀번호는 필수입니다.')
       return
     }
+    if (!supabaseAdmin) {
+      setCreateError('계정 생성에는 VITE_SUPABASE_SERVICE_KEY가 필요합니다.')
+      return
+    }
     setCreating(true)
     setCreateError('')
 
-    // 관리자 세션에 영향을 주지 않도록 격리된 임시 클라이언트 사용
-    const { createClient } = await import('@supabase/supabase-js')
-    const tmpClient = createClient(
-      import.meta.env.VITE_SUPABASE_URL,
-      import.meta.env.VITE_SUPABASE_ANON_KEY,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    )
-
-    const { data: authData, error: authErr } = await tmpClient.auth.signUp({
+    const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
       email: createForm.email,
       password: createForm.password,
+      email_confirm: true,
     })
     if (authErr) { setCreateError(authErr.message); setCreating(false); return }
-    if (!authData.user) { setCreateError('계정 생성에 실패했습니다. 이미 존재하는 이메일일 수 있습니다.'); setCreating(false); return }
+    if (!authData.user) { setCreateError('계정 생성에 실패했습니다.'); setCreating(false); return }
 
     const { data: emp, error: empErr } = await supabase.from('employees').insert([{
       name: createForm.name,
@@ -90,11 +88,13 @@ export default function AdminPage() {
       email: createForm.email,
       auth_user_id: authData.user.id,
       team_id: createForm.teamId || null,
+      is_first_login: true,
     }]).select('*').single()
 
     if (empErr) { setCreateError(empErr.message); setCreating(false); return }
 
     setEmployees((p) => [...p, emp])
+    setCreateSuccess(`계정이 생성되었습니다.  임시 비밀번호: ${createForm.password}`)
     setCreateForm(EMPTY_FORM)
     setShowCreateForm(false)
     setCreating(false)
@@ -297,10 +297,16 @@ export default function AdminPage() {
           <div className="mgmt-header">
             <span className="mgmt-count">전체 {employees.length}명</span>
             <button className="btn-primary" style={{ fontSize: 13, padding: '7px 14px' }}
-              onClick={() => { setShowCreateForm((v) => !v); setCreateError('') }}>
+              onClick={() => { setShowCreateForm((v) => !v); setCreateError(''); setCreateSuccess('') }}>
               + 계정 생성
             </button>
           </div>
+
+          {createSuccess && (
+            <div style={{ color: '#065f46', fontSize: 13, padding: '10px 14px', background: '#d1fae5', borderRadius: 8, marginBottom: 12, fontWeight: 500 }}>
+              {createSuccess}
+            </div>
+          )}
 
           {showCreateForm && (
             <div className="admin-form-card">
