@@ -7,7 +7,7 @@ export default function HomePage() {
         <div className="home-header">
           <div className="home-org-logo">
             <span className="home-org-icon">🏛</span>
-            <span className="home-org-name">창업진흥원</span>
+            <span className="home-org-name">울산경제일자리진흥원</span>
           </div>
           <h1 className="home-title">업무분장 관리 시스템</h1>
           <p className="home-sub">역할을 선택하여 시작하세요</p>

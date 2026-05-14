@@ -18,7 +18,7 @@ export default function Navbar() {
 
   return (
     <nav className="navbar">
-      <div className="nav-brand">🏛 창업진흥원 업무분장</div>
+      <div className="nav-brand">🏛 울산경제일자리진흥원 업무분장</div>
 
       <div style={{ flex: 1 }} />
 
