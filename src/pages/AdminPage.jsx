@@ -5,6 +5,7 @@ import {
   getDepartments, addDepartment, updateDepartment, deleteDepartment,
   getTeams, addTeam, updateTeam, deleteTeam,
   getEmployees, updateEmployee, deleteEmployee,
+  getTasks, addTask, updateTask, deleteTask,
 } from '../lib/storage'
 import { GRADE_OPTIONS, TYPE_OPTIONS } from '../lib/constants'
 
@@ -184,9 +185,94 @@ export default function AdminPage() {
     setAllTeams((p) => p.filter((t) => t.id !== id))
   }
 
+  // ── 대시보드/업무 통계용 state ──
+  const [allTasks, setAllTasks]           = useState([])
+  const [allAssignments, setAllAssignments] = useState([])
+  const [dashLoading, setDashLoading]     = useState(false)
+
+  // 역할별 현황 서브탭
+  const [roleSubTab, setRoleSubTab] = useState('employee')
+
+  // 업무분장 설정 state
+  const [wTaskFilter, setWTaskFilter] = useState('')
+  const [editingTaskId, setEditingTaskId]   = useState(null)
+  const [editTaskForm, setEditTaskForm]     = useState({})
+  const [newTaskForm, setNewTaskForm]       = useState({ name: '', project: '', difficulty: 2 })
+  const [showNewTask, setShowNewTask]       = useState(false)
+  const [tasksLoaded, setTasksLoaded]       = useState(false)
+
+  // 전체 업무 목록 필터
+  const [taskFilterRole, setTaskFilterRole] = useState('')
+  const [taskFilterTeam, setTaskFilterTeam] = useState('')
+
+  const loadDashboard = async () => {
+    if (dashLoading) return
+    setDashLoading(true)
+    const [{ data: tasks }, { data: asgn }] = await Promise.all([
+      supabase.from('tasks').select('*').order('project').order('created_at'),
+      supabase.from('assignments').select('*'),
+    ])
+    setAllTasks(tasks || [])
+    setAllAssignments(asgn || [])
+    setDashLoading(false)
+  }
+
+  const loadAdminTasks = async () => {
+    if (tasksLoaded) return
+    const tasks = await getTasks()
+    setAllTasks(tasks)
+    setTasksLoaded(true)
+  }
+
+  const handleTabChange = (key) => {
+    setActiveTab(key)
+    if (['dashboard', 'tasks', 'byRole', 'stats'].includes(key) && !dashLoading && allTasks.length === 0) {
+      loadDashboard()
+    }
+    if (key === 'workConfig') loadAdminTasks()
+  }
+
+  // 업무 통계 계산
+  const computeStats = () => {
+    const total = allAssignments.length
+    const byTeam = {}
+    employees.forEach((emp) => {
+      const teamName = emp.teams ? `${emp.teams.departments?.name} > ${emp.teams.name}` : '미배정'
+      if (!byTeam[teamName]) byTeam[teamName] = { total: 0 }
+      byTeam[teamName].total += allAssignments.filter((a) => a.employee_name === emp.name).length
+    })
+    return { total, byTeam }
+  }
+
+  // 업무분장 CRUD
+  const handleSaveTask = async () => {
+    await updateTask(editingTaskId, editTaskForm)
+    setAllTasks((p) => p.map((t) => t.id === editingTaskId ? { ...t, ...editTaskForm } : t))
+    setEditingTaskId(null)
+  }
+
+  const handleDeleteTask = async (id) => {
+    if (!window.confirm('이 업무를 삭제하시겠습니까?')) return
+    await deleteTask(id)
+    setAllTasks((p) => p.filter((t) => t.id !== id))
+  }
+
+  const handleAddTask = async () => {
+    if (!newTaskForm.name.trim() || !newTaskForm.project.trim()) return
+    const t = await addTask({ ...newTaskForm, difficulty: Number(newTaskForm.difficulty) })
+    setAllTasks((p) => [...p, t])
+    setNewTaskForm({ name: '', project: '', difficulty: 2 })
+    setShowNewTask(false)
+  }
+
   const TABS = [
     { key: 'employees', label: `직원 관리 (${employees.length})` },
     { key: 'org',       label: '부서/팀 관리' },
+    { key: 'dashboard', label: '전체 현황 대시보드' },
+    { key: 'tasks',     label: '전체 업무 목록' },
+    { key: 'byRole',    label: '역할별 현황' },
+    { key: 'stats',     label: '업무 통계' },
+    { key: 'workConfig',label: '업무분장 설정' },
   ]
 
   return (
@@ -196,10 +282,10 @@ export default function AdminPage() {
         <p>직원 계정 및 조직 구조를 관리합니다</p>
       </div>
 
-      <div className="tabs">
+      <div className="tabs" style={{ flexWrap: 'wrap' }}>
         {TABS.map((t) => (
           <button key={t.key} className={`tab ${activeTab === t.key ? 'active' : ''}`}
-            onClick={() => setActiveTab(t.key)}>
+            onClick={() => handleTabChange(t.key)}>
             {t.label}
           </button>
         ))}
@@ -355,6 +441,295 @@ export default function AdminPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── 전체 현황 대시보드 탭 ── */}
+      {activeTab === 'dashboard' && (
+        <div className="section-body">
+          {dashLoading ? (
+            <div className="empty-state">불러오는 중...</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
+              {employees.map((emp) => {
+                const empAsgn = allAssignments.filter((a) => a.employee_name === emp.name)
+                const total   = allTasks.length
+                const done    = empAsgn.length
+                const pct     = total > 0 ? Math.round((done / total) * 100) : 0
+                return (
+                  <div key={emp.id} className="card" style={{ padding: '16px 20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <strong>{emp.name}</strong>
+                      <span className={`role-badge-sm role-${emp.role}`}>{ROLE_LABELS[emp.role]}</span>
+                    </div>
+                    <div className="text-muted" style={{ fontSize: 12, marginBottom: 10 }}>
+                      {emp.teams ? `${emp.teams.departments?.name} > ${emp.teams.name}` : '팀 미배정'}
+                    </div>
+                    <div style={{ background: '#e5e7eb', borderRadius: 6, height: 8, marginBottom: 6 }}>
+                      <div style={{ background: '#4f46e5', width: `${pct}%`, height: '100%', borderRadius: 6, transition: 'width .3s' }} />
+                    </div>
+                    <div style={{ fontSize: 12, color: '#6b7280' }}>업무 배정 {done} / {total} ({pct}%)</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 전체 업무 목록 탭 ── */}
+      {activeTab === 'tasks' && (
+        <div className="section-body">
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            <select className="form-select" style={{ width: 140 }} value={taskFilterRole}
+              onChange={(e) => setTaskFilterRole(e.target.value)}>
+              <option value="">역할 전체</option>
+              {['employee', 'manager', 'director', 'admin'].map((r) =>
+                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+              )}
+            </select>
+            <select className="form-select" style={{ width: 180 }} value={taskFilterTeam}
+              onChange={(e) => setTaskFilterTeam(e.target.value)}>
+              <option value="">팀 전체</option>
+              {allTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          {dashLoading ? (
+            <div className="empty-state">불러오는 중...</div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#f3f4f6' }}>
+                    {['업무명', '프로젝트', '배정 직원', '직원 역할', '소속 팀'].map((h) => (
+                      <th key={h} style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {allTasks
+                    .filter((task) => {
+                      const asgn = allAssignments.find((a) => a.task_id === task.id)
+                      if (!asgn) return !taskFilterRole && !taskFilterTeam
+                      const emp = employees.find((e) => e.name === asgn.employee_name)
+                      if (!emp) return true
+                      if (taskFilterRole && emp.role !== taskFilterRole) return false
+                      if (taskFilterTeam && emp.team_id !== taskFilterTeam) return false
+                      return true
+                    })
+                    .map((task) => {
+                      const asgn = allAssignments.find((a) => a.task_id === task.id)
+                      const emp  = asgn ? employees.find((e) => e.name === asgn.employee_name) : null
+                      return (
+                        <tr key={task.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '8px 12px' }}>{task.name}</td>
+                          <td style={{ padding: '8px 12px', color: '#6b7280' }}>{task.project}</td>
+                          <td style={{ padding: '8px 12px' }}>{asgn?.employee_name || <span className="text-muted">미배정</span>}</td>
+                          <td style={{ padding: '8px 12px' }}>
+                            {emp ? <span className={`role-badge-sm role-${emp.role}`}>{ROLE_LABELS[emp.role]}</span> : '-'}
+                          </td>
+                          <td style={{ padding: '8px 12px', color: '#6b7280', fontSize: 12 }}>
+                            {emp?.teams ? `${emp.teams.departments?.name} > ${emp.teams.name}` : '-'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 역할별 현황 탭 ── */}
+      {activeTab === 'byRole' && (
+        <div className="section-body">
+          <div className="tabs" style={{ marginBottom: 16 }}>
+            {[['employee', '팀원'], ['manager', '팀장'], ['director', '부장']].map(([key, label]) => (
+              <button key={key} className={`tab ${roleSubTab === key ? 'active' : ''}`}
+                onClick={() => setRoleSubTab(key)}>{label}</button>
+            ))}
+          </div>
+          {dashLoading ? (
+            <div className="empty-state">불러오는 중...</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+              {employees.filter((e) => e.role === roleSubTab).map((emp) => {
+                const empAsgn = allAssignments.filter((a) => a.employee_name === emp.name)
+                return (
+                  <div key={emp.id} className="card" style={{ padding: '16px 20px' }}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>{emp.name}</div>
+                    <div className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                      {emp.grade} · {emp.type}
+                      {emp.teams && ` · ${emp.teams.departments?.name} > ${emp.teams.name}`}
+                    </div>
+                    <div style={{ fontSize: 13 }}>배정 업무 <strong>{empAsgn.length}</strong>개</div>
+                    {empAsgn.length > 0 && (
+                      <ul style={{ margin: '8px 0 0', paddingLeft: 16, fontSize: 12, color: '#374151' }}>
+                        {empAsgn.slice(0, 5).map((a) => {
+                          const t = allTasks.find((tk) => tk.id === a.task_id)
+                          return <li key={a.task_id}>{t ? t.name : a.task_id}</li>
+                        })}
+                        {empAsgn.length > 5 && <li style={{ color: '#9ca3af' }}>+{empAsgn.length - 5}개 더</li>}
+                      </ul>
+                    )}
+                  </div>
+                )
+              })}
+              {employees.filter((e) => e.role === roleSubTab).length === 0 && (
+                <div className="empty-state">해당 역할의 직원이 없습니다.</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 업무 통계 탭 ── */}
+      {activeTab === 'stats' && (
+        <div className="section-body">
+          {dashLoading ? (
+            <div className="empty-state">불러오는 중...</div>
+          ) : (() => {
+            const { total, byTeam } = computeStats()
+            const totalTasks = allTasks.length
+            const completionPct = totalTasks > 0 ? Math.round((total / (totalTasks * Math.max(employees.length, 1))) * 100) : 0
+            const maxTeamVal = Math.max(...Object.values(byTeam).map((v) => v.total), 1)
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16 }}>
+                  <div className="card" style={{ padding: '16px 20px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: '#4f46e5' }}>{total}</div>
+                    <div className="text-muted" style={{ fontSize: 13 }}>전체 배정 수</div>
+                  </div>
+                  <div className="card" style={{ padding: '16px 20px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: '#059669' }}>{totalTasks}</div>
+                    <div className="text-muted" style={{ fontSize: 13 }}>전체 업무 수</div>
+                  </div>
+                  <div className="card" style={{ padding: '16px 20px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: '#f59e0b' }}>{employees.length}</div>
+                    <div className="text-muted" style={{ fontSize: 13 }}>전체 직원 수</div>
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: '16px 20px' }}>
+                  <h3 style={{ marginBottom: 16 }}>팀별 배정 업무 현황</h3>
+                  {Object.entries(byTeam).map(([teamName, { total: cnt }]) => (
+                    <div key={teamName} style={{ marginBottom: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                        <span>{teamName}</span>
+                        <span style={{ color: '#6b7280' }}>{cnt}개</span>
+                      </div>
+                      <div style={{ background: '#e5e7eb', borderRadius: 6, height: 10 }}>
+                        <div style={{
+                          background: '#4f46e5',
+                          width: `${Math.round((cnt / maxTeamVal) * 100)}%`,
+                          height: '100%', borderRadius: 6,
+                        }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="card" style={{ padding: '16px 20px' }}>
+                  <h3 style={{ marginBottom: 16 }}>직원별 배정 업무 수</h3>
+                  {[...employees]
+                    .map((emp) => ({ emp, cnt: allAssignments.filter((a) => a.employee_name === emp.name).length }))
+                    .sort((a, b) => b.cnt - a.cnt)
+                    .map(({ emp, cnt }) => {
+                      const maxEmp = Math.max(...employees.map((e) => allAssignments.filter((a) => a.employee_name === e.name).length), 1)
+                      return (
+                        <div key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <span style={{ width: 70, fontSize: 13 }}>{emp.name}</span>
+                          <div style={{ flex: 1, background: '#e5e7eb', borderRadius: 6, height: 8 }}>
+                            <div style={{ background: '#10b981', width: `${Math.round((cnt / maxEmp) * 100)}%`, height: '100%', borderRadius: 6 }} />
+                          </div>
+                          <span style={{ fontSize: 12, color: '#6b7280', width: 30, textAlign: 'right' }}>{cnt}</span>
+                        </div>
+                      )
+                    })}
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
+      {/* ── 업무분장 설정 탭 ── */}
+      {activeTab === 'workConfig' && (
+        <div className="section-body">
+          <div className="mgmt-header" style={{ marginBottom: 16 }}>
+            <input className="form-input" style={{ width: 220 }} placeholder="업무명 검색"
+              value={wTaskFilter} onChange={(e) => setWTaskFilter(e.target.value)} />
+            <button className="btn-primary" style={{ fontSize: 13, padding: '7px 14px' }}
+              onClick={() => setShowNewTask((v) => !v)}>+ 업무 추가</button>
+          </div>
+
+          {showNewTask && (
+            <div className="admin-form-card" style={{ marginBottom: 16 }}>
+              <h3>새 업무 추가</h3>
+              <div className="admin-form-grid">
+                <div className="form-group">
+                  <label className="form-label">업무명 *</label>
+                  <input className="form-input" placeholder="업무명"
+                    value={newTaskForm.name}
+                    onChange={(e) => setNewTaskForm((p) => ({ ...p, name: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">프로젝트 *</label>
+                  <input className="form-input" placeholder="프로젝트명"
+                    value={newTaskForm.project}
+                    onChange={(e) => setNewTaskForm((p) => ({ ...p, project: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">난이도 (1~5)</label>
+                  <input className="form-input" type="number" min={1} max={5}
+                    value={newTaskForm.difficulty}
+                    onChange={(e) => setNewTaskForm((p) => ({ ...p, difficulty: e.target.value }))} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button className="btn-primary" onClick={handleAddTask}>추가</button>
+                <button className="btn-secondary" onClick={() => setShowNewTask(false)}>취소</button>
+              </div>
+            </div>
+          )}
+
+          <div className="emp-status-list">
+            {allTasks
+              .filter((t) => !wTaskFilter || t.name.includes(wTaskFilter) || t.project.includes(wTaskFilter))
+              .map((task) => (
+                <div key={task.id} className="emp-status-row">
+                  {editingTaskId === task.id ? (
+                    <>
+                      <div className="emp-edit-grid">
+                        <input className="inline-input" value={editTaskForm.name || ''}
+                          onChange={(e) => setEditTaskForm((p) => ({ ...p, name: e.target.value }))} placeholder="업무명" />
+                        <input className="inline-input" value={editTaskForm.project || ''}
+                          onChange={(e) => setEditTaskForm((p) => ({ ...p, project: e.target.value }))} placeholder="프로젝트" />
+                        <input className="inline-input" type="number" min={1} max={5}
+                          value={editTaskForm.difficulty || 2}
+                          onChange={(e) => setEditTaskForm((p) => ({ ...p, difficulty: Number(e.target.value) }))} />
+                      </div>
+                      <div className="action-btns">
+                        <button className="btn-sm primary" onClick={handleSaveTask}>저장</button>
+                        <button className="btn-sm" onClick={() => setEditingTaskId(null)}>취소</button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="emp-status-info">
+                        <span className="emp-status-name">{task.name}</span>
+                        <span className="emp-status-meta">{task.project} · 난이도 {task.difficulty}</span>
+                      </div>
+                      <div className="action-btns">
+                        <button className="btn-sm" onClick={() => { setEditingTaskId(task.id); setEditTaskForm({ name: task.name, project: task.project, difficulty: task.difficulty }) }}>수정</button>
+                        <button className="btn-sm danger" onClick={() => handleDeleteTask(task.id)}>삭제</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+          </div>
         </div>
       )}
 
