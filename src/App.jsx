@@ -10,6 +10,10 @@ import ManagerPage from './pages/ManagerPage'
 import DirectorPage from './pages/DirectorPage'
 import AdminPage from './pages/AdminPage'
 import WorkAssignment from './pages/WorkAssignment'
+import ProjectPage from './pages/ProjectPage'
+import WorkPoolPage from './pages/WorkPoolPage'
+import WorkAssignPage from './pages/WorkAssignPage'
+import WorkStatusPage from './pages/WorkStatusPage'
 
 export default function App() {
   return (
@@ -45,6 +49,26 @@ export default function App() {
               <Route path="/assign"   element={
                 <ProtectedRoute roles={['manager', 'admin']}>
                   <WorkAssignment />
+                </ProtectedRoute>
+              } />
+              <Route path="/projects" element={
+                <ProtectedRoute roles={['manager', 'director', 'admin']}>
+                  <ProjectPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/workpool" element={
+                <ProtectedRoute>
+                  <WorkPoolPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/workassign" element={
+                <ProtectedRoute roles={['manager', 'admin']}>
+                  <WorkAssignPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/workstatus" element={
+                <ProtectedRoute>
+                  <WorkStatusPage />
                 </ProtectedRoute>
               } />
               <Route path="*"         element={<Navigate to="/" replace />} />

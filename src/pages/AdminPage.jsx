@@ -8,9 +8,13 @@ import {
   getTasks, addTask, updateTask, deleteTask,
 } from '../lib/storage'
 import { GRADE_OPTIONS, TYPE_OPTIONS } from '../lib/constants'
+import ProjectPage from './ProjectPage'
+import WorkPoolPage from './WorkPoolPage'
+import WorkAssignPage from './WorkAssignPage'
 
 const ROLE_LABELS = { admin: '관리자', director: '부장', manager: '팀장', employee: '팀원' }
 const ROLE_OPTIONS = ['employee', 'manager', 'director', 'admin']
+const GRADE_MAX = { '주임': 15, '선임': 18, '책임': 20, '팀장': 25, '부장': 30, '관리자': 30 }
 
 const EMPTY_FORM = { name: '', grade: '선임', type: '정규직', role: 'employee', email: '', password: '', teamId: '' }
 
@@ -205,6 +209,28 @@ export default function AdminPage() {
   const [taskFilterRole, setTaskFilterRole] = useState('')
   const [taskFilterTeam, setTaskFilterTeam] = useState('')
 
+  // ── 새 대시보드 (projects / work_items / work_assignments) ──
+  const [newProjects, setNewProjects]       = useState([])
+  const [newWorkItems, setNewWorkItems]     = useState([])
+  const [newWorkAsgns, setNewWorkAsgns]     = useState([])
+  const [newDashLoading, setNewDashLoading] = useState(false)
+  const [newDashLoaded, setNewDashLoaded]   = useState(false)
+
+  const loadNewDash = async () => {
+    if (newDashLoading || newDashLoaded) return
+    setNewDashLoading(true)
+    const [{ data: projs }, { data: items }, { data: asgns }] = await Promise.all([
+      supabase.from('projects').select('id, name, type, status').order('created_at', { ascending: false }),
+      supabase.from('work_items').select('id, project_id, difficulty, status').order('created_at'),
+      supabase.from('work_assignments').select('employee_id, work_items(difficulty)').eq('is_primary', true),
+    ])
+    setNewProjects(projs || [])
+    setNewWorkItems(items || [])
+    setNewWorkAsgns(asgns || [])
+    setNewDashLoading(false)
+    setNewDashLoaded(true)
+  }
+
   const loadDashboard = async () => {
     if (dashLoading) return
     setDashLoading(true)
@@ -226,9 +252,8 @@ export default function AdminPage() {
 
   const handleTabChange = (key) => {
     setActiveTab(key)
-    if (['dashboard', 'tasks', 'byRole', 'stats'].includes(key) && !dashLoading && allTasks.length === 0) {
-      loadDashboard()
-    }
+    if (key === 'dashboard') loadNewDash()
+    if (['tasks', 'byRole', 'stats'].includes(key) && !dashLoading && allTasks.length === 0) loadDashboard()
     if (key === 'workConfig') loadAdminTasks()
   }
 
@@ -266,13 +291,16 @@ export default function AdminPage() {
   }
 
   const TABS = [
-    { key: 'employees', label: `직원 관리 (${employees.length})` },
-    { key: 'org',       label: '부서/팀 관리' },
-    { key: 'dashboard', label: '전체 현황 대시보드' },
-    { key: 'tasks',     label: '전체 업무 목록' },
-    { key: 'byRole',    label: '역할별 현황' },
-    { key: 'stats',     label: '업무 통계' },
-    { key: 'workConfig',label: '업무분장 설정' },
+    { key: 'employees',  label: `직원 관리 (${employees.length})` },
+    { key: 'org',        label: '부서/팀 관리' },
+    { key: 'dashboard',  label: '전체 현황 대시보드' },
+    { key: 'projects',   label: '사업 관리' },
+    { key: 'workpool',   label: '업무 풀' },
+    { key: 'workassign', label: '업무 배분' },
+    { key: 'tasks',      label: '전체 업무 목록' },
+    { key: 'byRole',     label: '역할별 현황' },
+    { key: 'stats',      label: '업무 통계' },
+    { key: 'workConfig', label: '업무분장 설정' },
   ]
 
   return (
@@ -453,33 +481,84 @@ export default function AdminPage() {
       {/* ── 전체 현황 대시보드 탭 ── */}
       {activeTab === 'dashboard' && (
         <div className="section-body">
-          {dashLoading ? (
+          {newDashLoading ? (
             <div className="empty-state">불러오는 중...</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
-              {employees.map((emp) => {
-                const empAsgn = allAssignments.filter((a) => a.employee_name === emp.name)
-                const total   = allTasks.length
-                const done    = empAsgn.length
-                const pct     = total > 0 ? Math.round((done / total) * 100) : 0
-                return (
-                  <div key={emp.id} className="card" style={{ padding: '16px 20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <strong>{emp.name}</strong>
-                      <span className={`role-badge-sm role-${emp.role}`}>{ROLE_LABELS[emp.role]}</span>
+          ) : (() => {
+            const totalItems    = newWorkItems.length
+            const unassigned    = newWorkItems.filter((i) => i.status === '미배정').length
+            const completed     = newWorkItems.filter((i) => i.status === '완료').length
+            const completePct   = totalItems > 0 ? Math.round((completed / totalItems) * 100) : 0
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                {/* 통계 카드 */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
+                  {[
+                    { label: '전체 사업', value: newProjects.length, color: '#4f46e5' },
+                    { label: '전체 업무', value: totalItems,         color: '#0ea5e9' },
+                    { label: '미배정 업무', value: unassigned,       color: '#f59e0b' },
+                    { label: '완료율',     value: `${completePct}%`, color: '#059669' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="card" style={{ padding: '14px 16px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 26, fontWeight: 700, color }}>{value}</div>
+                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{label}</div>
                     </div>
-                    <div className="text-muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                      {emp.teams ? `${emp.teams.departments?.name} > ${emp.teams.name}` : '팀 미배정'}
-                    </div>
-                    <div style={{ background: '#e5e7eb', borderRadius: 6, height: 8, marginBottom: 6 }}>
-                      <div style={{ background: '#4f46e5', width: `${pct}%`, height: '100%', borderRadius: 6, transition: 'width .3s' }} />
-                    </div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>업무 배정 {done} / {total} ({pct}%)</div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+                  ))}
+                </div>
+
+                {/* 사업별 진행률 */}
+                <div className="card" style={{ padding: '16px 20px' }}>
+                  <h3 style={{ marginBottom: 14, fontSize: 14 }}>사업별 진행률</h3>
+                  {newProjects.length === 0 ? (
+                    <div className="text-muted" style={{ fontSize: 13 }}>등록된 사업이 없습니다.</div>
+                  ) : newProjects.map((proj) => {
+                    const projItems = newWorkItems.filter((i) => i.project_id === proj.id)
+                    const done      = projItems.filter((i) => i.status === '완료').length
+                    const pct       = projItems.length > 0 ? Math.round((done / projItems.length) * 100) : 0
+                    return (
+                      <div key={proj.id} style={{ marginBottom: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                          <span>{proj.name} <span style={{ fontSize: 11, color: '#9ca3af' }}>({proj.status})</span></span>
+                          <span style={{ color: '#6b7280' }}>{done}/{projItems.length} ({pct}%)</span>
+                        </div>
+                        <div style={{ background: '#e5e7eb', borderRadius: 6, height: 8 }}>
+                          <div style={{ background: '#4f46e5', width: `${pct}%`, height: '100%', borderRadius: 6 }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* 직원별 업무 총점 */}
+                <div className="card" style={{ padding: '16px 20px' }}>
+                  <h3 style={{ marginBottom: 14, fontSize: 14 }}>직원별 업무 총점 현황</h3>
+                  {employees.map((emp) => {
+                    const score = newWorkAsgns
+                      .filter((a) => a.employee_id === emp.id)
+                      .reduce((s, a) => s + (a.work_items?.difficulty || 0), 0)
+                    const max   = GRADE_MAX[emp.grade] || 20
+                    const pct   = Math.min(Math.round((score / max) * 100), 100)
+                    const over  = score > max
+                    return (
+                      <div key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                        <span style={{ width: 60, fontSize: 13, flexShrink: 0 }}>{emp.name}</span>
+                        <span style={{ width: 36, fontSize: 11, color: '#9ca3af', flexShrink: 0 }}>{emp.grade}</span>
+                        <div style={{ flex: 1, background: '#e5e7eb', borderRadius: 6, height: 8 }}>
+                          <div style={{
+                            background: over ? '#dc2626' : '#10b981',
+                            width: `${pct}%`, height: '100%', borderRadius: 6,
+                          }} />
+                        </div>
+                        <span style={{ width: 52, fontSize: 12, textAlign: 'right', color: over ? '#dc2626' : '#374151', flexShrink: 0 }}>
+                          {score}/{max}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
         </div>
       )}
 
@@ -737,6 +816,21 @@ export default function AdminPage() {
               ))}
           </div>
         </div>
+      )}
+
+      {/* ── 사업 관리 탭 ── */}
+      {activeTab === 'projects' && (
+        <div className="section-body"><ProjectPage /></div>
+      )}
+
+      {/* ── 업무 풀 탭 ── */}
+      {activeTab === 'workpool' && (
+        <div className="section-body"><WorkPoolPage /></div>
+      )}
+
+      {/* ── 업무 배분 탭 ── */}
+      {activeTab === 'workassign' && (
+        <div className="section-body"><WorkAssignPage /></div>
       )}
 
       {/* ── 부서/팀 관리 탭 ── */}
