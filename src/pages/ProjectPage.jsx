@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
+import AIWorkSuggestion from '../components/AIWorkSuggestion'
 
 const PROJECT_TYPE_OPTIONS = ['창업지원','기업지원','일자리지원','교육사업','마케팅지원','기타']
 const STATUS_OPTIONS = ['준비중','진행중','완료','취소']
@@ -57,6 +58,7 @@ export default function ProjectPage() {
   const [form, setForm]         = useState(EMPTY_FORM)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState('')
+  const [aiProject, setAiProject] = useState(null)
 
   const canEdit = profile && ['admin', 'director', 'manager'].includes(profile.role)
 
@@ -218,17 +220,39 @@ export default function ProjectPage() {
                 </div>
               )}
               {canEdit && (
-                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                  <select className="inline-select" style={{ flex: 1, fontSize: 12 }} value={proj.status}
-                    onChange={(e) => handleStatusChange(proj.id, e.target.value)}>
-                    {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
-                  </select>
-                  <button className="btn-sm danger" onClick={() => handleDelete(proj.id)}>삭제</button>
+                <div style={{ display: 'flex', gap: 6, marginTop: 8, flexDirection: 'column' }}>
+                  <button
+                    onClick={() => setAiProject(proj)}
+                    style={{
+                      width: '100%', padding: '7px 0', borderRadius: 7, border: '1.5px solid #4f46e5',
+                      background: '#f5f3ff', color: '#4f46e5', fontWeight: 600, fontSize: 12,
+                      cursor: 'pointer', transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = '#4f46e5'; e.currentTarget.style.color = '#fff' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.color = '#4f46e5' }}
+                  >
+                    📄 계획서로 업무 생성
+                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <select className="inline-select" style={{ flex: 1, fontSize: 12 }} value={proj.status}
+                      onChange={(e) => handleStatusChange(proj.id, e.target.value)}>
+                      {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
+                    </select>
+                    <button className="btn-sm danger" onClick={() => handleDelete(proj.id)}>삭제</button>
+                  </div>
                 </div>
               )}
             </div>
           ))}
         </div>
+      )}
+
+      {aiProject && (
+        <AIWorkSuggestion
+          project={aiProject}
+          onClose={() => setAiProject(null)}
+          onAdded={(count) => alert(`✅ ${count}개 업무가 "${aiProject.name}"에 추가되었습니다.`)}
+        />
       )}
     </div>
   )
