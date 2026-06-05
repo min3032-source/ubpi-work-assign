@@ -68,7 +68,7 @@ export default function ProjectPage() {
     setLoading(true)
     const { data } = await supabase
       .from('projects')
-      .select('*, teams(name, departments(name))')
+      .select('*')
       .order('created_at', { ascending: false })
     setProjects(data || [])
     setLoading(false)
