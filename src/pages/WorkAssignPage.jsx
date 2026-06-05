@@ -9,6 +9,8 @@ export default function WorkAssignPage() {
   const [unassigned, setUnassigned]   = useState([])
   const [employees, setEmployees]     = useState([])
   const [assignments, setAssignments] = useState([])
+  const [opinions, setOpinions]       = useState([])
+  const [preferences, setPreferences] = useState([])
   const [loading, setLoading]         = useState(true)
   const [selected, setSelected]       = useState(null)
   const [assigning, setAssigning]     = useState(false)
@@ -19,20 +21,35 @@ export default function WorkAssignPage() {
 
   const load = async () => {
     setLoading(true)
-    const [{ data: items }, { data: emps }, { data: asgn }] = await Promise.all([
+    const [r0, r1, r2, r3, r4] = await Promise.all([
       supabase.from('work_items').select('*, projects(name)').eq('status', '미배정').order('created_at'),
       supabase.from('employees').select('id, name, grade, role, team_id, teams(name, departments(name))').order('created_at'),
       supabase.from('work_assignments').select('employee_id, work_items(difficulty)').eq('is_primary', true),
+      supabase.from('work_assignments')
+        .select('work_item_id, difficulty_opinion, employee_id, employees(name)')
+        .eq('is_primary', false)
+        .not('difficulty_opinion', 'is', null),
+      supabase.from('work_preferences').select('work_item_id, employee_id, reason, employees(name)').order('created_at'),
     ])
-    setUnassigned(items || [])
-    setEmployees(emps || [])
-    setAssignments(asgn || [])
+    setUnassigned(r0.data || [])
+    setEmployees(r1.data || [])
+    setAssignments(r2.data || [])
+    setOpinions(r3.data || [])
+    setPreferences(r4.data || [])
     setLoading(false)
   }
 
   const getScore = (empId) =>
     assignments.filter((a) => a.employee_id === empId)
       .reduce((sum, a) => sum + (a.work_items?.difficulty || 0), 0)
+
+  const getItemOpinions    = (id) => opinions.filter((o) => o.work_item_id === id)
+  const getItemPreferences = (id) => preferences.filter((p) => p.work_item_id === id)
+  const getAvgOpinion      = (id) => {
+    const ops = getItemOpinions(id)
+    if (ops.length === 0) return null
+    return (ops.reduce((s, o) => s + o.difficulty_opinion, 0) / ops.length).toFixed(1)
+  }
 
   const handleAssign = async (emp) => {
     if (!selected || !canAssign) return
@@ -52,6 +69,9 @@ export default function WorkAssignPage() {
     setAssigning(false)
   }
 
+  const toggleSelect = (item) =>
+    setSelected((prev) => prev?.id === item.id ? null : item)
+
   if (loading) return <div className="empty-state">불러오는 중...</div>
 
   return (
@@ -66,25 +86,57 @@ export default function WorkAssignPage() {
           <div className="empty-state">미배정 업무가 없습니다.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {unassigned.map((item) => (
-              <div key={item.id}
-                onClick={() => setSelected(selected?.id === item.id ? null : item)}
-                style={{
-                  padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
-                  border: `1.5px solid ${selected?.id === item.id ? '#3b82f6' : '#e5e7eb'}`,
-                  background: selected?.id === item.id ? '#eff6ff' : '#fff',
+            {unassigned.map((item) => {
+              const itemOpns  = getItemOpinions(item.id)
+              const itemPrefs = getItemPreferences(item.id)
+              const avg       = getAvgOpinion(item.id)
+              const isSelected = selected?.id === item.id
+
+              return (
+                <div key={item.id} style={{
+                  padding: '10px 14px', borderRadius: 8,
+                  border: `1.5px solid ${isSelected ? '#3b82f6' : '#e5e7eb'}`,
+                  background: isSelected ? '#eff6ff' : '#fff',
                 }}>
-                <div style={{ fontWeight: 500, fontSize: 14 }}>{item.title}</div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
-                  {item.projects?.name || '미분류'} · 난이도 {item.difficulty}점
+                  <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 2 }}>{item.title}</div>
+                  <div style={{ fontSize: 12, color: '#6b7280' }}>
+                    {item.projects?.name || '미분류'} · 난이도 {item.difficulty}점
+                  </div>
+
+                  {/* 직원 의견 평균 */}
+                  {avg && (
+                    <div style={{ fontSize: 11, color: '#4f46e5', marginTop: 4 }}>
+                      📊 직원 의견 평균 {avg}점 ({itemOpns.length}건):
+                      {' '}{itemOpns.map((o) => `${o.employees?.name}(${o.difficulty_opinion}점)`).join(' · ')}
+                    </div>
+                  )}
+
+                  {/* 희망 신청자 */}
+                  {itemPrefs.length > 0 && (
+                    <div style={{ fontSize: 11, color: '#059669', marginTop: 3 }}>
+                      ✋ 희망 신청: {itemPrefs.map((p) => p.employees?.name).join(', ')}
+                    </div>
+                  )}
+
+                  {/* 배정 버튼 */}
+                  {canAssign && (
+                    <button
+                      className={`btn-sm ${isSelected ? '' : 'primary'}`}
+                      style={{ marginTop: 8, width: '100%' }}
+                      onClick={() => toggleSelect(item)}
+                    >
+                      {isSelected ? '✕ 선택 취소' : '배정'}
+                    </button>
+                  )}
+
+                  {isSelected && (
+                    <div style={{ fontSize: 11, color: '#3b82f6', fontWeight: 600, marginTop: 6, textAlign: 'center' }}>
+                      → 오른쪽에서 직원을 선택하세요
+                    </div>
+                  )}
                 </div>
-                {selected?.id === item.id && (
-                  <span style={{ fontSize: 11, color: '#3b82f6', fontWeight: 600, marginTop: 4, display: 'block' }}>
-                    선택됨 — 오른쪽에서 직원을 선택하세요
-                  </span>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -93,16 +145,18 @@ export default function WorkAssignPage() {
       <div>
         <h3 style={{ fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 12 }}>
           직원별 배정 현황
-          {selected && <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 400, marginLeft: 6 }}>
-            ← "{selected.title}" 배정할 직원을 클릭하세요
-          </span>}
+          {selected && (
+            <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 400, marginLeft: 6 }}>
+              ← "{selected.title}" 배정
+            </span>
+          )}
         </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {employees.map((emp) => {
-            const score    = getScore(emp.id)
-            const max      = GRADE_MAX[emp.grade] || 20
-            const pct      = Math.min(Math.round((score / max) * 100), 100)
-            const over     = score > max
+            const score     = getScore(emp.id)
+            const max       = GRADE_MAX[emp.grade] || 20
+            const pct       = Math.min(Math.round((score / max) * 100), 100)
+            const over      = score > max
             const wouldOver = selected && (score + (selected.difficulty || 0)) > max
 
             return (
@@ -128,7 +182,6 @@ export default function WorkAssignPage() {
                   </div>
                 </div>
 
-                {/* 프로그레스 바: "정새봄 선임 12/18점 ████░░" */}
                 <div style={{ background: '#e5e7eb', borderRadius: 6, height: 8, marginBottom: selected ? 10 : 0 }}>
                   <div style={{
                     background: over ? '#dc2626' : pct > 80 ? '#f59e0b' : '#4f46e5',
